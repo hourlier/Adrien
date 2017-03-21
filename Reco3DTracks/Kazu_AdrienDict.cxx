@@ -37,80 +37,80 @@
 namespace std {} using namespace std;
 
 // Header files passed as explicit arguments
-#include "HourierTracker.h"
+#include "AStarTracker.h"
 
 // Header files passed via #pragma extra_include
 
 namespace ROOT {
-   static TClass *larlitecLcLHourierTracker_Dictionary();
-   static void larlitecLcLHourierTracker_TClassManip(TClass*);
-   static void *new_larlitecLcLHourierTracker(void *p = 0);
-   static void *newArray_larlitecLcLHourierTracker(Long_t size, void *p);
-   static void delete_larlitecLcLHourierTracker(void *p);
-   static void deleteArray_larlitecLcLHourierTracker(void *p);
-   static void destruct_larlitecLcLHourierTracker(void *p);
+   static TClass *larlitecLcLAStarTracker_Dictionary();
+   static void larlitecLcLAStarTracker_TClassManip(TClass*);
+   static void *new_larlitecLcLAStarTracker(void *p = 0);
+   static void *newArray_larlitecLcLAStarTracker(Long_t size, void *p);
+   static void delete_larlitecLcLAStarTracker(void *p);
+   static void deleteArray_larlitecLcLAStarTracker(void *p);
+   static void destruct_larlitecLcLAStarTracker(void *p);
 
    // Function generating the singleton type initializer
-   static TGenericClassInfo *GenerateInitInstanceLocal(const ::larlite::HourierTracker*)
+   static TGenericClassInfo *GenerateInitInstanceLocal(const ::larlite::AStarTracker*)
    {
-      ::larlite::HourierTracker *ptr = 0;
-      static ::TVirtualIsAProxy* isa_proxy = new ::TIsAProxy(typeid(::larlite::HourierTracker));
+      ::larlite::AStarTracker *ptr = 0;
+      static ::TVirtualIsAProxy* isa_proxy = new ::TIsAProxy(typeid(::larlite::AStarTracker));
       static ::ROOT::TGenericClassInfo 
-         instance("larlite::HourierTracker", "HourierTracker.h", 30,
-                  typeid(::larlite::HourierTracker), ::ROOT::Internal::DefineBehavior(ptr, ptr),
-                  &larlitecLcLHourierTracker_Dictionary, isa_proxy, 4,
-                  sizeof(::larlite::HourierTracker) );
-      instance.SetNew(&new_larlitecLcLHourierTracker);
-      instance.SetNewArray(&newArray_larlitecLcLHourierTracker);
-      instance.SetDelete(&delete_larlitecLcLHourierTracker);
-      instance.SetDeleteArray(&deleteArray_larlitecLcLHourierTracker);
-      instance.SetDestructor(&destruct_larlitecLcLHourierTracker);
+         instance("larlite::AStarTracker", "AStarTracker.h", 30,
+                  typeid(::larlite::AStarTracker), ::ROOT::Internal::DefineBehavior(ptr, ptr),
+                  &larlitecLcLAStarTracker_Dictionary, isa_proxy, 4,
+                  sizeof(::larlite::AStarTracker) );
+      instance.SetNew(&new_larlitecLcLAStarTracker);
+      instance.SetNewArray(&newArray_larlitecLcLAStarTracker);
+      instance.SetDelete(&delete_larlitecLcLAStarTracker);
+      instance.SetDeleteArray(&deleteArray_larlitecLcLAStarTracker);
+      instance.SetDestructor(&destruct_larlitecLcLAStarTracker);
       return &instance;
    }
-   TGenericClassInfo *GenerateInitInstance(const ::larlite::HourierTracker*)
+   TGenericClassInfo *GenerateInitInstance(const ::larlite::AStarTracker*)
    {
-      return GenerateInitInstanceLocal((::larlite::HourierTracker*)0);
+      return GenerateInitInstanceLocal((::larlite::AStarTracker*)0);
    }
    // Static variable to force the class initialization
-   static ::ROOT::TGenericClassInfo *_R__UNIQUE_(Init) = GenerateInitInstanceLocal((const ::larlite::HourierTracker*)0x0); R__UseDummy(_R__UNIQUE_(Init));
+   static ::ROOT::TGenericClassInfo *_R__UNIQUE_(Init) = GenerateInitInstanceLocal((const ::larlite::AStarTracker*)0x0); R__UseDummy(_R__UNIQUE_(Init));
 
    // Dictionary for non-ClassDef classes
-   static TClass *larlitecLcLHourierTracker_Dictionary() {
-      TClass* theClass =::ROOT::GenerateInitInstanceLocal((const ::larlite::HourierTracker*)0x0)->GetClass();
-      larlitecLcLHourierTracker_TClassManip(theClass);
+   static TClass *larlitecLcLAStarTracker_Dictionary() {
+      TClass* theClass =::ROOT::GenerateInitInstanceLocal((const ::larlite::AStarTracker*)0x0)->GetClass();
+      larlitecLcLAStarTracker_TClassManip(theClass);
    return theClass;
    }
 
-   static void larlitecLcLHourierTracker_TClassManip(TClass* ){
+   static void larlitecLcLAStarTracker_TClassManip(TClass* ){
    }
 
 } // end of namespace ROOT
 
 namespace ROOT {
    // Wrappers around operator new
-   static void *new_larlitecLcLHourierTracker(void *p) {
-      return  p ? ::new((::ROOT::Internal::TOperatorNewHelper*)p) ::larlite::HourierTracker : new ::larlite::HourierTracker;
+   static void *new_larlitecLcLAStarTracker(void *p) {
+      return  p ? ::new((::ROOT::Internal::TOperatorNewHelper*)p) ::larlite::AStarTracker : new ::larlite::AStarTracker;
    }
-   static void *newArray_larlitecLcLHourierTracker(Long_t nElements, void *p) {
-      return p ? ::new((::ROOT::Internal::TOperatorNewHelper*)p) ::larlite::HourierTracker[nElements] : new ::larlite::HourierTracker[nElements];
+   static void *newArray_larlitecLcLAStarTracker(Long_t nElements, void *p) {
+      return p ? ::new((::ROOT::Internal::TOperatorNewHelper*)p) ::larlite::AStarTracker[nElements] : new ::larlite::AStarTracker[nElements];
    }
    // Wrapper around operator delete
-   static void delete_larlitecLcLHourierTracker(void *p) {
-      delete ((::larlite::HourierTracker*)p);
+   static void delete_larlitecLcLAStarTracker(void *p) {
+      delete ((::larlite::AStarTracker*)p);
    }
-   static void deleteArray_larlitecLcLHourierTracker(void *p) {
-      delete [] ((::larlite::HourierTracker*)p);
+   static void deleteArray_larlitecLcLAStarTracker(void *p) {
+      delete [] ((::larlite::AStarTracker*)p);
    }
-   static void destruct_larlitecLcLHourierTracker(void *p) {
-      typedef ::larlite::HourierTracker current_t;
+   static void destruct_larlitecLcLAStarTracker(void *p) {
+      typedef ::larlite::AStarTracker current_t;
       ((current_t*)p)->~current_t();
    }
-} // end of namespace ROOT for class ::larlite::HourierTracker
+} // end of namespace ROOT for class ::larlite::AStarTracker
 
 namespace {
   void TriggerDictionaryInitialization_libKazu_Adrien_Impl() {
     static const char* headers[] = {
-"HourierTracker.h",
+"AStarTracker.h",
 0
     };
     static const char* includePaths[] = {
@@ -123,7 +123,7 @@ namespace {
 "/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/myLArLiteCV/build/include/../app",
 "/Applications/root_v6.08.00/include",
 "/Applications/root_v6.08.00/include",
-"/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/mylarlite/UserDev/Chimera_Adrien/Adrien/",
+"/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/mylarlite/UserDev/Adrien/Reco3DTracks/",
 0
     };
     static const char* fwdDeclCode = R"DICTFWDDCLS(
@@ -132,7 +132,7 @@ namespace {
 #pragma clang diagnostic ignored "-Wignored-attributes"
 #pragma clang diagnostic ignored "-Wreturn-type-c-linkage"
 extern int __Cling_Autoloading_Map;
-namespace larlite{class __attribute__((annotate("$clingAutoload$HourierTracker.h")))  HourierTracker;}
+namespace larlite{class __attribute__((annotate("$clingAutoload$AStarTracker.h")))  AStarTracker;}
 )DICTFWDDCLS";
     static const char* payloadCode = R"DICTPAYLOAD(
 #line 1 "libKazu_Adrien dictionary payload"
@@ -142,12 +142,12 @@ namespace larlite{class __attribute__((annotate("$clingAutoload$HourierTracker.h
 #endif
 
 #define _BACKWARD_BACKWARD_WARNING_H
-#include "HourierTracker.h"
+#include "AStarTracker.h"
 
 #undef  _BACKWARD_BACKWARD_WARNING_H
 )DICTPAYLOAD";
     static const char* classesHeaders[]={
-"larlite::HourierTracker", payloadCode, "@",
+"larlite::AStarTracker", payloadCode, "@",
 nullptr};
 
     static bool isInitialized = false;
