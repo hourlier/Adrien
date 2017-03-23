@@ -19,6 +19,7 @@
 #include "DataFormat/track.h"
 #include <TVector3.h>
 #include "DataFormat/Image2D.h"
+#include "TH1D.h"
 
 #include "/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/myLArLiteCV/app/ThruMu/AStar3DAlgo.h"
 
@@ -32,7 +33,7 @@ namespace larlite {
     public:
 
         /// Default constructor
-        AStarTracker(){ _name="AStarTracker"; _fout=0; _track_producer="dl"; _chstatus_producer="chstatus";_speedOffset=0;}
+        AStarTracker(){ _name="AStarTracker"; _fout=0; _track_producer="dl"; _chstatus_producer="chstatus"; _mctrack_producer = "mcreco";_speedOffset=-2;}
 
         /// Default destructor
         virtual ~AStarTracker(){}
@@ -59,6 +60,8 @@ namespace larlite {
     protected:
         // X[cm] to TPC tick (waveform index) conversion
         double X2Tick(double x, size_t plane) const;
+        //TPC tick (waveform index) to X[cm] conversion
+        double Tick2X(double tick, size_t plane) const;
 
         larlite::track Reconstruct(const TVector3& start_pt, const TVector3& end_pt,
                                    const std::vector<larcv::Image2D>& hit_image_v,
@@ -66,6 +69,7 @@ namespace larlite {
 
         std::string _track_producer;
         std::string _chstatus_producer;
+        std::string _mctrack_producer;
         int _run;
         int _subrun;
         int _event;

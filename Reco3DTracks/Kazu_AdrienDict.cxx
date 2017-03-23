@@ -56,7 +56,7 @@ namespace ROOT {
       ::larlite::AStarTracker *ptr = 0;
       static ::TVirtualIsAProxy* isa_proxy = new ::TIsAProxy(typeid(::larlite::AStarTracker));
       static ::ROOT::TGenericClassInfo 
-         instance("larlite::AStarTracker", "AStarTracker.h", 30,
+         instance("larlite::AStarTracker", "AStarTracker.h", 31,
                   typeid(::larlite::AStarTracker), ::ROOT::Internal::DefineBehavior(ptr, ptr),
                   &larlitecLcLAStarTracker_Dictionary, isa_proxy, 4,
                   sizeof(::larlite::AStarTracker) );

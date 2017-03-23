@@ -5,6 +5,7 @@
 #include "DataFormat/track.h"
 #include "DataFormat/hit.h"
 #include "DataFormat/Image2D.h"
+#include "DataFormat/mctrack.h"
 #include "LArUtil/Geometry.h"
 #include "LArUtil/GeometryHelper.h"
 #include "LArUtil/TimeService.h"
@@ -22,16 +23,19 @@ namespace larlite {
     }
 
     bool AStarTracker::analyze(storage_manager* storage) {
+        std::cout << "CAREFUL, nest step is to limit ourselves to start and end points that are reasonably reconstructed so that we don't have obviously wrong tracks" << std::endl;
         gStyle->SetOptStat(0);
         //
         // Retrieve data products
         //
         auto ev_track    = storage->get_data<event_track>(_track_producer);     // tracks
         auto ev_chstatus = storage->get_data<event_chstatus>(_chstatus_producer); // chstatus
+        //auto ev_mctrack  = storage->get_data<event_mctrack>(_mctrack_producer);
+
         _run = storage->run_id();
         _subrun = storage->subrun_id();
         _event = storage->event_id();
-        std::cout << _run << "\t" << _subrun << "\t" << _event << std::endl;
+
         // Check validity
         if(!ev_track)
             throw DataFormatException("Could not locate event_track data product!");
@@ -53,7 +57,10 @@ namespace larlite {
         // 3) call reconstruct function
         //
         for(size_t track_index=0; track_index < ev_track->size(); ++track_index) {
-
+            _track = track_index;
+            std::cout << _run << "\t" << _subrun << "\t" << _event << "\t" << _track << std::endl;
+            if(_run == 1 && _subrun == 110 && _event == 5495 && _track == 9){std::cout << "not this track, sorry, too bad point reconstruction" << std::endl;continue;}
+            if (track_to_hit[track_index].size() == 0){std::cout << "no hits associated to this track, stop here for now" << std::endl;continue;}
             //
             // 0) retrieve 3D start/end points
             //
@@ -75,8 +82,9 @@ namespace larlite {
                 wire_bounds[plane].first  = 1.e9;
                 wire_bounds[plane].second = 0.;
             }
+
             // Figure out range limits based on hits
-            for(auto const& hit_index : track_to_hit[track_index]) {
+            /*for(auto const& hit_index : track_to_hit[track_index]) {
                 auto const& h = (*ev_hit)[hit_index];
                 auto& time_bound = time_bounds[h.WireID().Plane];
                 auto& wire_bound = wire_bounds[h.WireID().Plane];
@@ -85,7 +93,7 @@ namespace larlite {
                 if(h.PeakTime() > time_bound.second) time_bound.second = h.PeakTime();
                 if(h.WireID().Wire < wire_bound.first ) wire_bound.first  = h.WireID().Wire;
                 if(h.WireID().Wire > wire_bound.second) wire_bound.second = h.WireID().Wire;
-            }
+            }*/
 
 
             // make sure the start and end points are projected back into the range
@@ -105,7 +113,15 @@ namespace larlite {
                 if((larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3) > wire_bounds[iPlane].second) wire_bounds[iPlane].second = wireProjEndPt;
             }
 
-            // Update the range
+            // equalize time ranges to intercept the same range on 3 views
+            for(size_t iPlane=0;iPlane<3;iPlane++){
+                for(size_t jPlane=0;jPlane<3;jPlane++){
+                    if(time_bounds[jPlane].first  < time_bounds[iPlane].first) {time_bounds[iPlane].first  = time_bounds[jPlane].first;}
+                    if(time_bounds[jPlane].second > time_bounds[iPlane].second){time_bounds[iPlane].second = time_bounds[jPlane].second;}
+                }
+            }
+
+            // Update the range with margin
             double ImageMargin = 50.;
             for(size_t iPlane=0;iPlane<3;iPlane++){
                 time_bounds[iPlane].first  -= ImageMargin;
@@ -121,6 +137,9 @@ namespace larlite {
                 wire_bounds[iPlane].first  = (size_t)(wire_bounds[iPlane].first + 0.5);
                 wire_bounds[iPlane].second = (size_t)(wire_bounds[iPlane].second + 0.5);
             }
+
+            // make sure the number of row is divisible by 2
+            if(!( (size_t)(time_bounds[0].second - time_bounds[0].first)%2)){for(size_t iPlane=0;iPlane<3;iPlane++){time_bounds[iPlane].second+=1;}}
 
 
             // Using the range, construct Image2D
@@ -175,7 +194,7 @@ namespace larlite {
                         for(size_t row=0; row<chstatus_meta.rows(); ++row){
                             // eveything that has a non-zero value is a bad ch for A* algo
                             if(status == larlite::larch::kGOOD){chstatus_data[(ch - wire_bound.first) * chstatus_meta.rows() + row] = 0;}
-                            else {chstatus_data[(ch - wire_bound.first) * chstatus_meta.rows() + row] = (float)(status);}
+                            else {chstatus_data[(ch - wire_bound.first) * chstatus_meta.rows() + row] = 1;/*(float)(status);*/}
                         }
                     }
                     break;
@@ -184,11 +203,19 @@ namespace larlite {
                 chstatus_image_v.emplace_back(std::move(chstatus_image));
             }
 
+            for(size_t iPlane = 0;iPlane<3;iPlane++){
+                hit_image_v.at(iPlane).compress(hit_image_v.at(iPlane).meta().rows()/2,hit_image_v.at(iPlane).meta().cols());
+                //std::cout << "Plane_" << iPlane << " : " << hit_image_v.at(iPlane).meta().rows() << " row in image and " << hit_image_v.at(iPlane).meta().cols() << " cols in image" << std::endl;
+            }
+
             //
             // 3) call reconstruct! and set the return track ovject to override the proto-track
             //
-            _track = track_index;
+
             (*ev_track)[track_index] = Reconstruct(start_pt, end_pt, hit_image_v, chstatus_image_v);
+            std::cout << "reconstructed length : " << (*ev_track)[track_index].Length(0) << " [cm]" << std::endl;
+
+            std::cout << std::endl;
         }
 
         return true;
@@ -215,6 +242,21 @@ namespace larlite {
         tick -= 0.3 / larp->DriftVelocity(larp->Efield(2));
 
         return tick * 2;
+    }
+
+    double AStarTracker::Tick2X(double tick, size_t plane) const{
+        auto ts = larutil::TimeService::GetME();
+        auto larp = larutil::LArProperties::GetME();
+        // remove tick offset due to plane
+        if(plane == 0) {tick/=2;}
+        if(plane == 1) {tick += 0.3/larp->DriftVelocity(larp->Efield(1));tick/=2;}
+        if(plane == 3) {
+            tick += 0.3/larp->DriftVelocity(larp->Efield(1));
+            tick += 0.3/larp->DriftVelocity(larp->Efield(2));
+            tick/=2;
+        }
+        double x = (tick+ts->TriggerOffsetTPC()+_speedOffset)*larp->DriftVelocity();
+        return x;
     }
 
 
@@ -245,7 +287,7 @@ namespace larlite {
             end_row = hit_image_v[2].meta().row(X2Tick(end_pt.X(),2));
         }else{std::cout << "error: 0 rows " << std::endl; return larlite::track();}
 
-        TCanvas *cOutput = new TCanvas(Form("cOutput_%d_%d_%d_%d",_run,_subrun,_event,_track),Form("cOutput_%d_%d_%d_%d",_run,_subrun,_event,_track),1200,400);
+        TCanvas *cOutput = new TCanvas(Form("cOutput_%d_%d_%d_%d",_run,_subrun,_event,_track),Form("cOutput_%d_%d_%d_%d",_run,_subrun,_event,_track),600,200);
         cOutput->Divide(3,1);
         TH2D *hHitImages[3];
         TH2D *hDeadCh[3];
@@ -267,7 +309,7 @@ namespace larlite {
             gEnd[iPlane]->SetPoint(0, end_cols[iPlane],end_row);
 
             if(hit_image_v[iPlane].meta().rows() == 0 || hit_image_v[iPlane].meta().cols() == 0)continue;
-            hHitImages[iPlane] = new TH2D(Form("hHitImages_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hHitImages_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
+            hHitImages[iPlane] = new TH2D(Form("hHitImages_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hHitImages_%d_%d_%d_%d_%zu;wires;ticks",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
             hDeadCh[iPlane] = new TH2D(Form("hDeadCh_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hDeadCh_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
 
 
@@ -285,13 +327,13 @@ namespace larlite {
         //-----------------------------------------------
         larlitecv::AStar3DAlgoConfig config;
         config.accept_badch_nodes = true;
-        config.astar_threshold.resize(3,3);
+        config.astar_threshold.resize(3,5);
         //config.astar_threshold[2] = 10.0;
-        config.astar_neighborhood.resize(3,15); //can jump over n empty pixels
-        config.astar_start_padding = 20;// allowed region around the start point
-        config.astar_end_padding = 20;  // allowed region around the end point
+        config.astar_neighborhood.resize(3,5); //can jump over n empty pixels
+        config.astar_start_padding = 15;// allowed region around the start point
+        config.astar_end_padding = 15;  // allowed region around the end point
         config.lattice_padding = 5; // margin around the edges
-        config.min_nplanes_w_hitpixel = 2;
+        config.min_nplanes_w_hitpixel = 1;
         config.restrict_path = false; // do I want to restrict to a cylinder around the strainght line of radius defined bellow
         config.path_restriction_radius = 30.0;
 
@@ -300,12 +342,22 @@ namespace larlite {
         //-----------------------------------------------
         larlitecv::AStar3DAlgo algo( config );
         algo.setVerbose(0);
+        algo.setPixelValueEsitmation(true);
 
         std::cout << "starting A*" << std::endl;
         RecoedPath = algo.findpath( hit_image_v, chstatus_image_v, tag_image_v, start_row, end_row, start_cols, end_cols, goal_reached );
 
+        larlite::track newTrack;
         int nNodes[3] = {0,0,0};
+        double nodeX,nodeY,nodeZ;
         for(size_t iNode=0;iNode<RecoedPath.size();iNode++){
+            TVector3 node(RecoedPath.at(iNode).u,RecoedPath.at(iNode).v,RecoedPath.at(iNode).w);
+            newTrack.add_vertex(node);
+            //std::cout << RecoedPath.at(iNode).str() << std::endl;
+            nodeX = Tick2X(RecoedPath.at(iNode).tyz[0],0);
+            nodeY = RecoedPath.at(iNode).tyz[1];
+            nodeZ = RecoedPath.at(iNode).tyz[2];
+            std::cout << Form("node (X,Y,Z) : %3.2f \t %3.2f \t %3.2f",nodeX,nodeY,nodeZ) << std::endl;
             for(int iPlane=0;iPlane<3;iPlane++){
                 gReco[iPlane]->SetPoint(nNodes[iPlane],RecoedPath.at(iNode).cols[iPlane],RecoedPath.at(iNode).row);
                 nNodes[iPlane]++;
@@ -314,14 +366,14 @@ namespace larlite {
 
         for(size_t iPlane = 0;iPlane<3;iPlane++){
             cOutput->cd(iPlane+1);
-            hHitImages[iPlane]->Rebin2D();
-            hDeadCh[iPlane]->Rebin2D();
+            //hHitImages[iPlane]->Rebin2D();
+            //hDeadCh[iPlane]->Rebin2D();
             hHitImages[iPlane]->SetMarkerStyle(20);
             hHitImages[iPlane]->Draw("colz");
             hDeadCh[iPlane]->SetMarkerStyle(7);
             //hDeadCh[iPlane]->SetMarkerSize(0.5);
             hDeadCh[iPlane]->SetMarkerColor(kGray);
-            hDeadCh[iPlane]->Draw("same");
+            if(hDeadCh[iPlane]->Integral()>0)hDeadCh[iPlane]->Draw("colz same");
             gStart[iPlane]->SetMarkerStyle(20);
             gStart[iPlane]->SetMarkerColor(2);
             gEnd[iPlane]->SetMarkerStyle(20);
@@ -330,7 +382,7 @@ namespace larlite {
             gEnd[iPlane]->Draw("same P");
             gReco[iPlane]->SetMarkerColor(4);
             gReco[iPlane]->SetLineColor(4);
-            gReco[iPlane]->SetMarkerStyle(20);
+            gReco[iPlane]->SetMarkerStyle(7);
             gReco[iPlane]->SetMarkerSize(0.75);
             if(gReco[iPlane]->GetN()>0)gReco[iPlane]->Draw("same LP");
             cOutput->Modified();
@@ -338,16 +390,16 @@ namespace larlite {
         }
         
 
-        cOutput->SaveAs(Form("cOutput_%d_%d_%d_%d.pdf",_run,_subrun,_event,_track));
+        cOutput->SaveAs(Form("plot/cOutput_%d_%d_%d_%d.pdf",_run,_subrun,_event,_track));
+
+
         
-        
-        return larlite::track();
+        return newTrack;
     }
     
     
     
     bool AStarTracker::finalize() {
-        
         return true;
     }
     
