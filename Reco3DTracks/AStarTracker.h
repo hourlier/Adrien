@@ -33,7 +33,14 @@ namespace larlite {
     public:
 
         /// Default constructor
-        AStarTracker(){ _name="AStarTracker"; _fout=0; _track_producer="dl"; _chstatus_producer="chstatus"; _mctrack_producer = "mcreco";_speedOffset=-2;}
+        AStarTracker(){
+            _name="AStarTracker";
+            _fout=0; _track_producer="dl";
+            _chstatus_producer="chstatus";
+            _mctrack_producer = "mcreco";
+            _speedOffset=-2;
+            _rebinTime = 2;
+        }
 
         /// Default destructor
         virtual ~AStarTracker(){}
@@ -61,11 +68,13 @@ namespace larlite {
         // X[cm] to TPC tick (waveform index) conversion
         double X2Tick(double x, size_t plane) const;
         //TPC tick (waveform index) to X[cm] conversion
-        double Tick2X(double tick, size_t plane) const;
+        double Tick2X(double tick, size_t plane)const;
 
         larlite::track Reconstruct(const TVector3& start_pt, const TVector3& end_pt,
                                    const std::vector<larcv::Image2D>& hit_image_v,
                                    const std::vector<larcv::Image2D>& chstatus_image_v);
+
+        void GetdQdX(const std::vector<larcv::Image2D>& hit_image_v, larlite::track thisTrack);
 
         std::string _track_producer;
         std::string _chstatus_producer;
@@ -74,7 +83,10 @@ namespace larlite {
         int _subrun;
         int _event;
         int _track;
+        int _rebinTime;
         double _speedOffset;
+        TH1D *hdQdx;
+        TCanvas *c2;
     };
 }
 #endif
