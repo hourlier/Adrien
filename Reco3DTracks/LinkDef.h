@@ -10,6 +10,7 @@
 #pragma link off all functions;
 
 #pragma link C++ class larlite::AStarTracker+;
+#pragma link C++ class larlite::AStarTrackerDiagnostic+;
 //ADD_NEW_CLASS ... do not change this line
 #endif
 

@@ -1,19 +1,19 @@
 /**
- * \file AStarTracker.h
+ * \file AStarTrackerDiagnostic.h
  *
  * \ingroup Adrien
  *
- * \brief Class def header for a class AStarTracker
+ * \brief Class def header for a class AStarTrackerDiagnostic
  *
- * @author kazuhiro
+ * @author hourlier
  */
 
 /** \addtogroup Adrien
 
  @{*/
 
-#ifndef LARLITE_AStarTracker_H
-#define LARLITE_AStarTracker_H
+#ifndef LARLITE_AStarTrackerDiagnostic_H
+#define LARLITE_AStarTrackerDiagnostic_H
 
 #include "Analysis/ana_base.h"
 #include "DataFormat/track.h"
@@ -26,18 +26,17 @@
 
 namespace larlite {
     /**
-     \class AStarTracker
+     \class AStarTrackerDiagnostic
      User custom analysis class made by SHELL_USER_NAME
      */
-    class AStarTracker : public ana_base{
+    class AStarTrackerDiagnostic : public ana_base{
 
     public:
 
         /// Default constructor
-        AStarTracker(){
+        AStarTrackerDiagnostic(){
             _name="AStarTracker";
-            _fout=0;//TFile::Open("output.root","RECREATE");
-            _track_producer="dl";
+            _fout=0; _track_producer="dl";
             _chstatus_producer="chstatus";
             _mctrack_producer = "mcreco";
             _speedOffset=-2;
@@ -45,14 +44,14 @@ namespace larlite {
         }
 
         /// Default destructor
-        virtual ~AStarTracker(){}
+        virtual ~AStarTrackerDiagnostic(){}
 
-        /** IMPLEMENT in AStarTracker.cc!
+        /** IMPLEMENT in AStarTrackerDiagnostic.cxx!
          Initialization method to be called before the analysis event loop.
          */
         virtual bool initialize();
 
-        /** IMPLEMENT in AStarTracker.cc!
+        /** IMPLEMENT in AStarTrackerDiagnostic.cxx!
          Analyze a data event-by-event
          */
         virtual bool analyze(storage_manager* storage);
@@ -65,27 +64,6 @@ namespace larlite {
         void set_producer(std::string track_producer,std::string chstatus_producer){ _track_producer = track_producer; _chstatus_producer = chstatus_producer; }
 
     protected:
-        // X[cm] to TPC tick (waveform index) conversion
-        double X2Tick(double x, size_t plane) const;
-        //TPC tick (waveform index) to X[cm] conversion
-        double Tick2X(double tick, size_t plane)const;
-
-        larlite::track Reconstruct(const TVector3& start_pt, const TVector3& end_pt,
-                                   const std::vector<larcv::Image2D>& hit_image_v,
-                                   const std::vector<larcv::Image2D>& chstatus_image_v);
-
-        void CompareReco2MC3D(const larlite::track recoTrack, const larlite::mctrack trueTrack);
-
-        void CompareReco2hits(const std::vector<larcv::Image2D> hitlist);
-
-        void CompareMC2hits(const larlite::mctrack mct, const std::vector<larcv::Image2D> hit_image_v);
-
-        void DrawdQdX(larlite::track thisTrack);
-
-        larlite::track CorrectSCE(larlite::track thisTrack);
-        std::vector<TVector3> CorrectSCE(larlite::mctrack thisTrack);
-        std::vector<TVector3> CorrectSCE(std::vector<TVector3> thisTrack);
-
         std::string _track_producer;
         std::string _chstatus_producer;
         std::string _mctrack_producer;
@@ -95,17 +73,7 @@ namespace larlite {
         int _track;
         int _rebinTime;
         double _speedOffset;
-        TH1D *hdQdx;
-        TH1D *hdQdxEntries;
-        TH1D *hDistance2MC;
-        TH1D *hDistance2MCX;
-        TH1D *hDistance2MCY;
-        TH1D *hDistance2MCZ;
-        TH1D *hDistance2Hit;
-        TH1D *hDistanceMC2Hit;
-        std::vector<larlitecv::AStar3DNode> RecoedPath;
-        std::vector<TVector3> CorrectedPath;
-        TCanvas *c2;
+        
     };
 }
 #endif
