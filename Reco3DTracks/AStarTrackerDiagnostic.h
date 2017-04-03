@@ -18,9 +18,13 @@
 #include "Analysis/ana_base.h"
 #include "DataFormat/track.h"
 #include "DataFormat/mctrack.h"
-#include <TVector3.h>
+#include "DataFormat/hit.h"
 #include "DataFormat/Image2D.h"
 #include "TH1D.h"
+#include "TH2D.h"
+#include "TGraph.h"
+#include "TVector3.h"
+#include "TCanvas.h"
 
 #include "/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/myLArLiteCV/app/ThruMu/AStar3DAlgo.h"
 
@@ -41,6 +45,7 @@ namespace larlite {
             _mctrack_producer = "mcreco";
             _speedOffset=-2;
             _rebinTime = 2;
+            _numPlanes = 3;
         }
 
         /// Default destructor
@@ -61,19 +66,43 @@ namespace larlite {
          */
         virtual bool finalize();
 
-        void set_producer(std::string track_producer,std::string chstatus_producer){ _track_producer = track_producer; _chstatus_producer = chstatus_producer; }
+        void set_producer(std::string track_producer,std::string chstatus_producer){
+            _track_producer = track_producer;
+            _chstatus_producer = chstatus_producer;
+        }
 
     protected:
+
+        void   VisualizeTrack();
+        double X2Tick(double x, size_t plane) const;
+        larlite::track CorrectSCE();
+        std::vector<TVector3> CorrectSCE(std::vector<TVector3> originpath);
+        void CompareRecoCorr2MC();
+
         std::string _track_producer;
         std::string _chstatus_producer;
         std::string _mctrack_producer;
+        std::string _trackID;
         int _run;
         int _subrun;
         int _event;
         int _track;
         int _rebinTime;
+        int _numPlanes;
         double _speedOffset;
-        
+        larlite::track thisTrack;
+        larlite::track thisCorrectedTrack;
+        larlite::mctrack thisTrueTrack;
+        std::vector<larlite::hit> thisHit_v;
+        TH2D *hHitImage2D[3];
+        TH1D *hDistance2MC;
+        TGraph *gRecoedTrack[3];
+        TGraph *gCorrectedTrack[3];
+        TGraph *gTrueTrack[3];
+        TCanvas *Window;
+        std::vector<TCanvas*> Window_v;
+        std::vector<TCanvas*> dist2MC_v;
+        TH1D *dist2MC_all;
     };
 }
 #endif

@@ -109,6 +109,7 @@ namespace larlite {
             const size_t num_planes = 3;
             std::vector<std::pair<double,double> > time_bounds(num_planes); // first=min, second=max
             std::vector<std::pair<double,double> > wire_bounds(num_planes); // first=min, second=max
+
             // Initialize range limits
             for(size_t plane=0; plane<num_planes; ++plane) {
                 time_bounds[plane].first  = 1.e9;
@@ -116,7 +117,6 @@ namespace larlite {
                 wire_bounds[plane].first  = 1.e9;
                 wire_bounds[plane].second = 0.;
             }
-
             // Figure out range limits based on hits
             /*for(auto const& hit_index : track_to_hit[track_index]) {
                 auto const& h = (*ev_hit)[hit_index];
@@ -128,8 +128,6 @@ namespace larlite {
                 if(h.WireID().Wire < wire_bound.first ) wire_bound.first  = h.WireID().Wire;
                 if(h.WireID().Wire > wire_bound.second) wire_bound.second = h.WireID().Wire;
             }*/
-
-
             // make sure the start and end points are projected back into the range
             for(size_t iPlane=0;iPlane<3;iPlane++){
                 // make sure starting point is projected back in the range
@@ -146,7 +144,6 @@ namespace larlite {
                 if((larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3) < wire_bounds[iPlane].first ) wire_bounds[iPlane].first  = wireProjEndPt;
                 if((larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3) > wire_bounds[iPlane].second) wire_bounds[iPlane].second = wireProjEndPt;
             }
-
             // equalize time ranges to intercept the same range on 3 views
             for(size_t iPlane=0;iPlane<3;iPlane++){
                 for(size_t jPlane=0;jPlane<3;jPlane++){
@@ -154,7 +151,6 @@ namespace larlite {
                     if(time_bounds[jPlane].second > time_bounds[iPlane].second){time_bounds[iPlane].second = time_bounds[jPlane].second;}
                 }
             }
-
             // Update the range with margin
             double ImageMargin = 50.;
             for(size_t iPlane=0;iPlane<3;iPlane++){
@@ -171,11 +167,22 @@ namespace larlite {
                 wire_bounds[iPlane].first  = (size_t)(wire_bounds[iPlane].first + 0.5);
                 wire_bounds[iPlane].second = (size_t)(wire_bounds[iPlane].second + 0.5);
             }
-
             // make sure the number of row is divisible by 2
             if(!( (size_t)(time_bounds[0].second - time_bounds[0].first)%_rebinTime)){for(size_t iPlane=0;iPlane<3;iPlane++){time_bounds[iPlane].second+=1;}}
-
-
+            // check if any associated hit is within the limits
+            bool HitsPresent = false;
+            for(auto const& hit_index : track_to_hit[track_index]) {
+                auto const& h = (*ev_hit)[hit_index];
+                auto& time_bound = time_bounds[h.WireID().Plane];
+                auto& wire_bound = wire_bounds[h.WireID().Plane];
+                // make sure current hit is within the range
+                if(h.PeakTime() < time_bound.first )continue;
+                if(h.PeakTime() > time_bound.second)continue;
+                if(h.WireID().Wire < wire_bound.first ) continue;
+                if(h.WireID().Wire > wire_bound.second) continue;
+                HitsPresent=true;
+            }
+            if(HitsPresent == false){std::cout << "no hits in Image2D" << std::endl; continue;}
 
             // Using the range, construct Image2D
             std::vector<larcv::Image2D> hit_image_v;
@@ -239,9 +246,9 @@ namespace larlite {
                 chstatus_image_v.emplace_back(std::move(chstatus_image));
             }
 
+            // compress Image2D
             for(size_t iPlane = 0;iPlane<3;iPlane++){
                 hit_image_v.at(iPlane).compress(hit_image_v.at(iPlane).meta().rows()/_rebinTime,hit_image_v.at(iPlane).meta().cols());
-                //std::cout << "Plane_" << iPlane << " : " << hit_image_v.at(iPlane).meta().rows() << " row in image and " << hit_image_v.at(iPlane).meta().cols() << " cols in image" << std::endl;
             }
 
             //
