@@ -75,13 +75,11 @@ namespace larlite {
                                    const std::vector<larcv::Image2D>& chstatus_image_v);
 
         void CompareReco2MC3D(const larlite::track recoTrack, const larlite::mctrack trueTrack);
-
         void CompareReco2hits(const std::vector<larcv::Image2D> hitlist);
-
-        void CompareMC2hits(const larlite::mctrack mct, const std::vector<larcv::Image2D> hit_image_v);
-
         void DrawdQdX(larlite::track thisTrack);
 
+        larlite::track MakeTrack();
+        larlite::track ComputedQdX(larlite::track newTrack, const std::vector<larcv::Image2D>& hit_image_v);
         larlite::track CorrectSCE(larlite::track thisTrack);
         std::vector<TVector3> CorrectSCE(larlite::mctrack thisTrack);
         std::vector<TVector3> CorrectSCE(std::vector<TVector3> thisTrack);

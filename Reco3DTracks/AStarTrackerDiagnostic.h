@@ -73,36 +73,58 @@ namespace larlite {
 
     protected:
 
-        void   VisualizeTrack();
+
         double X2Tick(double x, size_t plane) const;
+
         larlite::track CorrectSCE();
+
         std::vector<TVector3> CorrectSCE(std::vector<TVector3> originpath);
+
+        void VisualizeTrack();
         void CompareRecoCorr2MC();
+        void CompareReco2Hits();
+        void CompareLengths();
+        void DrawdQdX();
+        void DrawdQdxSurface();
+        void DrawPlots();
 
         std::string _track_producer;
         std::string _chstatus_producer;
         std::string _mctrack_producer;
         std::string _trackID;
+
         int _run;
         int _subrun;
         int _event;
         int _track;
         int _rebinTime;
         int _numPlanes;
+        int chstat[3][3456];
+
         double _speedOffset;
+
         larlite::track thisTrack;
         larlite::track thisCorrectedTrack;
         larlite::mctrack thisTrueTrack;
+
         std::vector<larlite::hit> thisHit_v;
+        std::vector<larlite::hit> thisGausHit_v;
+
         TH2D *hHitImage2D[3];
+        TH2D *hLengthComparison;
+
         TH1D *hDistance2MC;
+        TH1D *dist2MC_all;
+        TH1D *hdQdx;
+        TH1D *hdQdxEntries;
+
         TGraph *gRecoedTrack[3];
         TGraph *gCorrectedTrack[3];
         TGraph *gTrueTrack[3];
+
         TCanvas *Window;
         std::vector<TCanvas*> Window_v;
         std::vector<TCanvas*> dist2MC_v;
-        TH1D *dist2MC_all;
     };
 }
 #endif
