@@ -70,9 +70,11 @@ namespace larlite {
         //TPC tick (waveform index) to X[cm] conversion
         double Tick2X(double tick, size_t plane)const;
 
-        larlite::track Reconstruct(const TVector3& start_pt, const TVector3& end_pt,
-                                   const std::vector<larcv::Image2D>& hit_image_v,
+        larlite::track Reconstruct(const std::vector<larcv::Image2D>& hit_image_v,
                                    const std::vector<larcv::Image2D>& chstatus_image_v);
+        /*larlite::track Reconstruct(const TVector3& start_pt, const TVector3& end_pt,
+                                   const std::vector<larcv::Image2D>& hit_image_v,
+                                   const std::vector<larcv::Image2D>& chstatus_image_v);*/
 
         void CompareReco2MC3D(const larlite::track recoTrack, const larlite::mctrack trueTrack);
         void CompareReco2hits(const std::vector<larcv::Image2D> hitlist);
@@ -103,6 +105,8 @@ namespace larlite {
         TH1D *hDistanceMC2Hit;
         std::vector<larlitecv::AStar3DNode> RecoedPath;
         std::vector<TVector3> CorrectedPath;
+        TVector3 start_pt;
+        TVector3 end_pt;
         TCanvas *c2;
     };
 }

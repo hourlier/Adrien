@@ -71,8 +71,8 @@ namespace larlite {
             //
 
             auto const& track = (*ev_track)[track_index];
-            auto const& start_pt = track.Vertex();
-            auto const& end_pt   = track.End();
+            start_pt = track.Vertex();
+            end_pt   = track.End();
             int thisTrackID = track.ID();
 
             //
@@ -153,6 +153,7 @@ namespace larlite {
             if(!( (size_t)(time_bounds[0].second - time_bounds[0].first)%_rebinTime)){for(size_t iPlane=0;iPlane<3;iPlane++){time_bounds[iPlane].second+=1;}}
             // check if any associated hit is within the limits
             bool HitsPresent = false;
+            int nHits=0;
             for(auto const& hit_index : track_to_hit[track_index]) {
                 auto const& h = (*ev_hit)[hit_index];
                 auto& time_bound = time_bounds[h.WireID().Plane];
@@ -163,8 +164,10 @@ namespace larlite {
                 if(h.WireID().Wire < wire_bound.first ) continue;
                 if(h.WireID().Wire > wire_bound.second) continue;
                 HitsPresent=true;
+                nHits++;
             }
             if(HitsPresent == false){std::cout << "no hits in Image2D" << std::endl; continue;}
+            else{std::cout << "found " << nHits << " hist in the image" << std::endl;}
 
             // Using the range, construct Image2D
             std::vector<larcv::Image2D> hit_image_v;
@@ -238,10 +241,10 @@ namespace larlite {
             //
             // 3) call reconstruct! and set the return track ovject to override the proto-track
             //
-            (*ev_track)[track_index] = Reconstruct(start_pt, end_pt, hit_image_v, chstatus_image_v);
+            (*ev_track)[track_index] = Reconstruct(hit_image_v, chstatus_image_v);
             (*ev_track)[track_index].set_track_id(thisTrackID);
 
-            std::cout << std::endl;
+            std::cout << std::endl << std::endl;
         }
         return true;
     }
@@ -281,7 +284,7 @@ namespace larlite {
     }
 
 
-    larlite::track AStarTracker::Reconstruct(const TVector3& start_pt, const TVector3& end_pt, const std::vector<larcv::Image2D>& hit_image_v, const std::vector<larcv::Image2D>& chstatus_image_v){
+    larlite::track AStarTracker::Reconstruct(const std::vector<larcv::Image2D>& hit_image_v, const std::vector<larcv::Image2D>& chstatus_image_v){
         std::vector<larcv::Image2D> tag_image_v(3);
         for(size_t iPlane = 0;iPlane<3;iPlane++){
             tag_image_v[iPlane] = hit_image_v[iPlane];
@@ -329,8 +332,8 @@ namespace larlite {
         config.accept_badch_nodes = true;
         config.astar_threshold.resize(3,5);
         config.astar_neighborhood.resize(3,5); //can jump over n empty pixels
-        config.astar_start_padding = 7;// allowed region around the start point
-        config.astar_end_padding = 7;  // allowed region around the end point
+        config.astar_start_padding = 10;// allowed region around the start point
+        config.astar_end_padding = 10;  // allowed region around the end point
         config.lattice_padding = 5; // margin around the edges
         config.min_nplanes_w_hitpixel = 1;
         config.restrict_path = false; // do I want to restrict to a cylinder around the strainght line of radius defined bellow
@@ -459,18 +462,41 @@ namespace larlite {
     larlite::track AStarTracker::MakeTrack(){
         larlite::track newTrack;
         double nodeX,nodeY,nodeZ,nodeDirX,nodeDirY,nodeDirZ,norm;
+
         for(size_t iNode=RecoedPath.size()-1;iNode>0;iNode--){
             nodeX = Tick2X(RecoedPath.at(iNode).tyz[0],0);
             nodeY = RecoedPath.at(iNode).tyz[1];
             nodeZ = RecoedPath.at(iNode).tyz[2];
             TVector3 node(nodeX,nodeY,nodeZ);
-            newTrack.add_vertex(node);
-            if(iNode<RecoedPath.size()-1){
+            if(iNode == 1){
                 nodeDirX =  Tick2X(RecoedPath.at(iNode+1).tyz[0],0)-Tick2X(RecoedPath.at(iNode).tyz[0],0);
                 nodeDirY =  RecoedPath.at(iNode+1).tyz[1]-RecoedPath.at(iNode).tyz[1];
                 nodeDirZ =  RecoedPath.at(iNode+1).tyz[2]-RecoedPath.at(iNode).tyz[2];
                 norm = sqrt(nodeDirX*nodeDirX+nodeDirY*nodeDirY+nodeDirZ*nodeDirZ);
                 TVector3 nodeDir(nodeDirX/norm,nodeDirY/norm,nodeDirZ/norm);
+                newTrack.add_vertex(node);
+                newTrack.add_direction(nodeDir);
+
+                // lastly, add end point
+                nodeX = Tick2X(RecoedPath.at(0).tyz[0],0);
+                nodeY = RecoedPath.at(0).tyz[1];
+                nodeZ = RecoedPath.at(0).tyz[2];
+                TVector3 node0(nodeX,nodeY,nodeZ);
+                nodeDirX = Tick2X(RecoedPath.at(0).tyz[0],0)-Tick2X(RecoedPath.at(iNode).tyz[0],0);
+                nodeDirY = RecoedPath.at(0).tyz[1]-RecoedPath.at(iNode).tyz[1];
+                nodeDirY = RecoedPath.at(0).tyz[1]-RecoedPath.at(iNode).tyz[1];
+                norm = sqrt(nodeDirX*nodeDirX+nodeDirY*nodeDirY+nodeDirZ*nodeDirZ);
+                TVector3 nodeDir2(nodeDirX/norm,nodeDirY/norm,nodeDirZ/norm);
+                newTrack.add_vertex(node0);
+                newTrack.add_direction(nodeDir2);
+            }
+            else if(iNode > 1 && iNode<RecoedPath.size()-1){
+                nodeDirX =  Tick2X(RecoedPath.at(iNode+1).tyz[0],0)-Tick2X(RecoedPath.at(iNode).tyz[0],0);
+                nodeDirY =  RecoedPath.at(iNode+1).tyz[1]-RecoedPath.at(iNode).tyz[1];
+                nodeDirZ =  RecoedPath.at(iNode+1).tyz[2]-RecoedPath.at(iNode).tyz[2];
+                norm = sqrt(nodeDirX*nodeDirX+nodeDirY*nodeDirY+nodeDirZ*nodeDirZ);
+                TVector3 nodeDir(nodeDirX/norm,nodeDirY/norm,nodeDirZ/norm);
+                newTrack.add_vertex(node);
                 newTrack.add_direction(nodeDir);
             }
             else{
@@ -479,8 +505,8 @@ namespace larlite {
                 nodeDirZ = RecoedPath.at(iNode).tyz[2]-RecoedPath.at(0).tyz[2];
                 norm = sqrt(nodeDirX*nodeDirX+nodeDirY*nodeDirY+nodeDirZ*nodeDirZ);
                 TVector3 nodeDir(nodeDirX/norm,nodeDirY/norm,nodeDirZ/norm);
+                newTrack.add_vertex(node);
                 newTrack.add_direction(nodeDir);
-
             }
         }
         return newTrack;
@@ -489,35 +515,56 @@ namespace larlite {
     larlite::track AStarTracker::ComputedQdX(larlite::track newTrack, const std::vector<larcv::Image2D>& hit_image_v){
         double X0,Y0,X1,Y1,X2,Y2;
         std::vector<double> planedQdx;
-        double Npx = 2.5;
+        double Npx = 5;
         double dist,xp,yp,alpha;
         double localdQdx;
         double nodeDirX,nodeDirY,nodeDirZ,norm;
+        TH2D *hImage[3];
+        TH2D *hIntegral[3];
+        TGraph *gTrack[3];
+        TGraph *gStartNend[3];
+
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            gTrack[iPlane] = new TGraph();
+            hImage[iPlane] = new TH2D(Form("hImage_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hImage_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
+            hIntegral[iPlane] = new TH2D(Form("hIntegral_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hIntegral_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
+            for(int icol=0;icol<hit_image_v[iPlane].meta().cols();icol++){
+                for(int irow=0;irow<hit_image_v[iPlane].meta().rows();irow++){
+                    hImage[iPlane]->SetBinContent(icol+1,irow+1,hit_image_v[iPlane].pixel(irow,icol));
+                }
+            }
+            gStartNend[iPlane] = new TGraph();
+            gStartNend[iPlane]->SetPoint(0,hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(start_pt,iPlane).w/0.3),hit_image_v[iPlane].meta().row(X2Tick(start_pt.X(),iPlane)));
+            gStartNend[iPlane]->SetPoint(1,hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w/0.3),hit_image_v[iPlane].meta().row(X2Tick(end_pt.X(),iPlane)));
+        }
 
         std::cout << "computing dqdx" << std::endl;
         for(size_t iPlane = 0;iPlane<3;iPlane++){
-            std::cout << newTrack.NumberTrajectoryPoints() << " points in track" << std::endl;
+
             for(size_t iNode=0;iNode<newTrack.NumberTrajectoryPoints()-1;iNode++){
                 localdQdx=0;
+                X1 = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(newTrack.LocationAtPoint(iNode  ),iPlane).w/0.3);
+                X2 = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(newTrack.LocationAtPoint(iNode+1),iPlane).w/0.3);
+
+                Y1 = hit_image_v[iPlane].meta().row(X2Tick(newTrack.LocationAtPoint(iNode  ).X(),iPlane));
+                Y2 = hit_image_v[iPlane].meta().row(X2Tick(newTrack.LocationAtPoint(iNode+1).X(),iPlane));
+
+                gTrack[iPlane]->SetPoint(iNode,X1,Y1);
+                gTrack[iPlane]->SetPoint(iNode+1,X2,Y2);
+
+                if(X1 == X2){X1 -= 0.001;}
+                if(Y1 == Y2){Y1 -= 0.001;}
+
                 for(int icol=0;icol<hit_image_v[iPlane].meta().cols();icol++){
                     for(int irow=0;irow<hit_image_v[iPlane].meta().rows();irow++){
-                        if(hit_image_v[iPlane].pixel(irow,icol) == 0)continue;
+                        //if(hit_image_v[iPlane].pixel(irow,icol) == 0)continue;
                         //----------------------------
-                        // first, check if the point can belon to this segment
+                        // first, check if the point can belong to this segment
                         // measure the distance to the line
                         // check the angles
                         //----------------------------
                         double theta0; // angle with which the segment [iNode, iNode+1] is ssen by the current point
                         double theta1; // angle with which the segment [jNode, jNode+1] is seen by the current point
-
-                        X1 = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(newTrack.LocationAtPoint(iNode  ),iPlane).w/0.3);
-                        X2 = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(newTrack.LocationAtPoint(iNode+1),iPlane).w/0.3);
-
-                        Y1 = hit_image_v[iPlane].meta().row(X2Tick(newTrack.LocationAtPoint(iNode  ).X(),iPlane));
-                        Y2 = hit_image_v[iPlane].meta().row(X2Tick(newTrack.LocationAtPoint(iNode+1).X(),iPlane));
-
-                        if(X1 == X2){X1 -= 0.001;}
-                        if(Y1 == Y2){Y1 -= 0.001;}
                         X0 = icol+0.5;
                         Y0 = irow+0.5;
                         alpha = ( (X2-X1)*(X0-X1)+(Y2-Y1)*(Y0-Y1) )/( pow(X2-X1,2)+pow(Y2-Y1,2) );
@@ -550,6 +597,7 @@ namespace larlite {
                         nodeDirZ =  newTrack.LocationAtPoint(iNode+1).Z()-newTrack.LocationAtPoint(iNode).Z();;//RecoedPath.at(iNode-1).tyz[2]-RecoedPath.at(iNode).tyz[2];
                         norm = sqrt(nodeDirX*nodeDirX+nodeDirY*nodeDirY+nodeDirZ*nodeDirZ);
                         localdQdx+=hit_image_v[iPlane].pixel(irow,icol)/norm;
+                        hIntegral[iPlane]->Fill(X0,Y0);
                     }
                 }
                 planedQdx.push_back(localdQdx);
@@ -557,6 +605,18 @@ namespace larlite {
             newTrack.add_dqdx(planedQdx);
             planedQdx.clear();
         }
+        TCanvas *c = new TCanvas(Form("c_%d_%d_%d_%d",_run,_subrun,_event,_track),Form("c_%d_%d_%d_%d",_run,_subrun,_event,_track),1200,300);
+        c->Divide(3,1);
+        for(int iPlane=0;iPlane<3;iPlane++){
+            c->cd(iPlane+1);
+            hImage[iPlane]->Draw("colz");
+            hIntegral[iPlane]->Draw("same");
+            hImage[iPlane]->Draw("same colz");
+            gTrack[iPlane]->Draw("same LP");
+            gStartNend[iPlane]->SetMarkerStyle(20);
+            gStartNend[iPlane]->Draw("same P");
+        }
+        c->SaveAs(Form("%s.pdf",c->GetName()));
         return newTrack;
     }
 

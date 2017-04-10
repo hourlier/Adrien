@@ -435,14 +435,15 @@ namespace larlite {
     void AStarTrackerDiagnostic::DrawdQdX(){
         for(size_t iNode = 0;iNode<thisTrack.NumberTrajectoryPoints()-1;iNode++){
             double dqdx = thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ)+thisTrack.DQdxAtPoint(iNode,larlite::geo::kU)+thisTrack.DQdxAtPoint(iNode,larlite::geo::kV);
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)!=0) dqdx*=3./2.;
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)!=0) dqdx*=3./2.;
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)==0) dqdx*=3./2.;
+            /*
+            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ)==0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU)!=0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)!=0)dqdx*=3./2.;
+            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ)!=0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU)==0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)!=0)dqdx*=3./2.;
+            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ)!=0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU)!=0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)==0)dqdx*=3./2.;
 
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)!=0) dqdx*=3.;
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)==0) dqdx*=3.;
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)==0) dqdx*=3.;
-
+            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ)==0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)!=0)dqdx*=3.;
+            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ)!=0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)==0)dqdx*=3.;
+            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ)==0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)==0)dqdx*=3.;
+             */
             hdQdx->Fill(thisTrack.Length(iNode),dqdx);
             hdQdxEntries->Fill(thisTrack.Length(iNode));
         }
