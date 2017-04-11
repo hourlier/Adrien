@@ -1,17 +1,3 @@
-/**
- * \file ChimeraTrackEvaluator.h
- *
- * \ingroup Chimera
- *
- * \brief Class def header for a class ChimeraTrackEvaluator
- *
- * @author hourlier
- */
-
-/** \addtogroup Chimera
-
- @{*/
-
 #ifndef LARLITE_CHIMERATRACKEVALUATOR_H
 #define LARLITE_CHIMERATRACKEVALUATOR_H
 
@@ -22,7 +8,7 @@ namespace larlite {
     class ChimeraTrackEvaluator{
     public:
         /// Default constructor
-        ChimeraTrackEvaluator();
+        ChimeraTrackEvaluator(){}
 
         /// Default destructor
         virtual ~ChimeraTrackEvaluator(){}
@@ -68,5 +54,3 @@ namespace larlite {
 }
 
 #endif
-
-/** @} */ // end of doxygen group

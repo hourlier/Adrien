@@ -1,21 +1,7 @@
-/**
- * \file ChimeraPatching.h
- *
- * \ingroup Chimera
- *
- * \brief Class def header for a class ChimeraPatching
- *
- * @author hourlier
- */
-
-/** \addtogroup Chimera
-
- @{*/
-
 #ifndef LARLITE_CHIMERAPATCHING_H
 #define LARLITE_CHIMERAPATCHING_H
 // std C++
-#include <string>
+//#include <string>
 // larlite
 #include "Analysis/ana_base.h"
 #include "ChimeraTrackEvaluator.h"
@@ -80,13 +66,3 @@ namespace larlite {
     };
 }
 #endif
-
-//**************************************************************************
-//
-// For Analysis framework documentation, read Manual.pdf here:
-//
-// http://microboone-docdb.fnal.gov:8080/cgi-bin/ShowDocument?docid=3183
-//
-//**************************************************************************
-
-/** @} */ // end of doxygen group 

@@ -1,7 +1,8 @@
-#ifndef LARLITE_AStarTracker_CXX
-#define LARLITE_AStarTracker_CXX
+#ifndef LARLITE_CHIMERATRACKEVALUATOR_CXX
+#define LARLITE_CHIMERATRACKEVALUATOR_CXX
 
 #include "ChimeraTrackEvaluator.h"
+#include "DataFormat/track.h"
 
 namespace larlite {
 
