@@ -13,6 +13,7 @@ OBJECTS = $(SOURCES:.cxx=.o)
 # include options for this package
 INCFLAGS  = -I.                       #Include itself
 INCFLAGS += $(shell larlite-config --includes)
+INCFLAGS += $(shell root-config --cflags) -g
 
 # platform-specific options
 OSNAME          = $(shell uname -s)
@@ -24,6 +25,7 @@ include $(LARLITE_BASEDIR)/Makefile/Makefile.${OSNAME}
 
 # call the common GNUmakefile
 LDFLAGS += $(shell larlite-config --libs)
+LDFLAGS += $(shell root-config --libs) -g
 include $(LARLITE_BASEDIR)/Makefile/GNUmakefile.CORE
 
 

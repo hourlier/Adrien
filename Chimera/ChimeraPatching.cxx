@@ -6,9 +6,9 @@
 namespace larlite {
 
     bool ChimeraPatching::initialize() {
-        hX0     = new TH1D("hX0",    "hX0",    100,-200,200);
-        hY0     = new TH1D("hY0",    "hY0",    100,-200,200);
-        hZ0     = new TH1D("hY0",    "hY0",    1000,0,10000);
+        hX0     = new TH1D("hX0",    "hX0",    100,0,250);
+        hY0     = new TH1D("hY0",    "hY0",    100,-120,120);
+        hZ0     = new TH1D("hY0",    "hY0",    1100,0,1100);
         hL0     = new TH1D("hL0",    "hL0",    100,0,1000);
         hTheta0 = new TH1D("hTheta0","hTheta0",90,0,0.5*3.141597);
         hPhi0   = new TH1D("hPhi0",  "hPhi0",  180,-0.5*3.141597,0.5*3.141597);
@@ -22,7 +22,7 @@ namespace larlite {
 
         hScore = new TH1D("hScore","hScore",100,0,1);
 
-        double parSigmas[3] = {20,100,10}; //σ_R,σ_L,σ_angles
+        double parSigmas[3] = {20,100,10*TMath::Pi()/180.}; //σ_R,σ_L,σ_angles
         double parTargets[6] = {100,75,365,20,0.3,0.67}; // X0,Y0,Z0,L0,theta,phi
         _evaluator.SetSigmas(parSigmas);
         _evaluator.SetTargets(parTargets);
