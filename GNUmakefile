@@ -20,7 +20,7 @@ endif
 #
 # Define directories to be compile upon a global "make"...
 #
-SUBDIRS := Reco3DTracks #ADD_NEW_SUBDIR ... do not remove this comment from this line
+SUBDIRS := Reco3DTracks Chimera #ADD_NEW_SUBDIR ... do not remove this comment from this line
 
 #####################################################################################
 #
