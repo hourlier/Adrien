@@ -4,6 +4,7 @@
 //#include <string>
 // larlite
 #include "Analysis/ana_base.h"
+#include "DataFormat/hit.h"
 #include "ChimeraTrackEvaluator.h"
 //root
 #include "TH1D.h"
@@ -42,6 +43,8 @@ namespace larlite {
         virtual bool finalize();
 
     protected:
+        void DrawTrack(const std::vector<larlite::hit> HitCluster);
+
         std::string _track_producer;
         std::string _hit_producer;
 
@@ -63,6 +66,18 @@ namespace larlite {
 
         TH1D *hScore;
 
+        int _run;
+        int _subrun;
+        int _event;
+        int _track;
+        double maxScore;
+        int bestRun;
+        int bestSubRun;
+        int bestEvent;
+        int bestTrackindex;
+
+        larlite::track bestTrack;
+        std::vector<larlite::hit> bestHitCluster;
     };
 }
 #endif

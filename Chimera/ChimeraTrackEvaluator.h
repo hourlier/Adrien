@@ -13,10 +13,13 @@ namespace larlite {
         /// Default destructor
         virtual ~ChimeraTrackEvaluator(){}
 
-        /// Set Target parameters for a given track
+        /// Set/get Target parameters for a given track
         void SetTargets(double *par);
-        /// Set allowed variation arround targets
+        std::vector<double> GetTargets();
+
+        /// Set/get allowed variation arround targets
         void SetSigmas(double *par);
+        std::vector<double> GetSigmas();
         void SetEval(double *parTarget, double *parSigma);
         /// Evaluate Track
         double EvalTrack(larlite::track thisTrack);

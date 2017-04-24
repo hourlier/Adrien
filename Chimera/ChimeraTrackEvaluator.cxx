@@ -14,11 +14,30 @@ namespace larlite {
         _theta0 = par[4];
         _phi0   = par[5];
     }
+    //______________________________________________________
+    std::vector<double> ChimeraTrackEvaluator::GetTargets(){
+        std::vector<double> targets(6);
+        targets.push_back(_X0);
+        targets.push_back(_Y0);
+        targets.push_back(_Z0);
+        targets.push_back(_L0);
+        targets.push_back(_theta0);
+        targets.push_back(_phi0);
+        return targets;
+    }
     //------------------------------------------------------
     void ChimeraTrackEvaluator::SetSigmas(double *par){
         _sigma_R      = par[0];
         _sigma_length = par[1];
         _sigma_angles = par[2];
+    }
+    //______________________________________________________
+    std::vector<double> ChimeraTrackEvaluator::GetSigmas(){
+        std::vector<double> sigmas(3);
+        sigmas.push_back(_sigma_R);
+        sigmas.push_back(_sigma_length);
+        sigmas.push_back(_sigma_angles);
+        return sigmas;
     }
     //______________________________________________________
     void ChimeraTrackEvaluator::SetEval(double *parTarget, double *parSigma){
