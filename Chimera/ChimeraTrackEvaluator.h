@@ -43,10 +43,12 @@ namespace larlite {
         double _L0;
         double _theta0;
         double _phi0;
+
         /// how strict are we on the requirements?
         double _sigma_R;
         double _sigma_angles;
         double _sigma_length;
+
         // how well a given track do?
         double _score_R;
         double _score_theta;
