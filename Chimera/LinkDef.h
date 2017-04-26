@@ -9,7 +9,8 @@
 #pragma link off all classes;
 #pragma link off all functions;
 
-#pragma link C++ class larlite::ChimeraPatching+;
+#pragma link C++ class ChimeraFinding+;
+#pragma link C++ class ChimeraPatching+;
 #pragma link C++ class larlite::ChimeraTrackEvaluator+;
 //ADD_NEW_CLASS ... do not change this line
 #endif

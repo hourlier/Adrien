@@ -13,7 +13,7 @@ include $(LARLITE_BASEDIR)/Makefile/Makefile.${OSNAME}
 
 #add your program below with a space after the previous one.
 #This makefile compiles all binaries specified below.
-PROGRAMS = FindCoupeTracks
+PROGRAMS = GenerateChimeraEvents
 
 all= 	$(PROGRAMS)
 

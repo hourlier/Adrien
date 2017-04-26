@@ -1,83 +1,35 @@
-#ifndef LARLITE_CHIMERAPATCHING_H
-#define LARLITE_CHIMERAPATCHING_H
-// std C++
-//#include <string>
-// larlite
-#include "Analysis/ana_base.h"
+#ifndef CHIMERAPATCHING_H
+#define CHIMERAPATCHING_H
+
+#include <string>
+#include <vector>
+
 #include "DataFormat/hit.h"
-#include "ChimeraTrackEvaluator.h"
-//root
-#include "TH1D.h"
+#include "DataFormat/track.h"
+#include "DataFormat/storage_manager.h"
 
-namespace larlite {
-    /**
-     \class ChimeraPatching
-     User custom analysis class made by SHELL_USER_NAME
-     */
-    class ChimeraPatching : public ana_base{
+#include "TH2D.h"
+#include "TCanvas.h"
+#include "TVector3.h"
 
-    public:
+class ChimeraPatching{
 
-        /// Default constructor
-        ChimeraPatching(){
-            _name="ChimeraPatching";
-            _fout=0;
-            _track_producer="pandoraNu";
-            _hit_producer="gaushit";
+public:
+    ChimeraPatching(){}
+    virtual ~ChimeraPatching(){};
+    void Initialize();
+    void AddTrack(larlite::track newTrack, std::vector<larlite::hit> newHitCluster);
+    void DrawEvent();
+    void NewEvent(std::string evtID, TVector3 X0);
+    void TranslateClusters();
 
-        }
-
-        /// Default destructor
-        virtual ~ChimeraPatching(){}
-
-        /** Initialization method to be called before the analysis event loop.
-         */
-        virtual bool initialize();
-
-        /** Analyze a data event-by-event
-         */
-        virtual bool analyze(storage_manager* storage);
-
-        /** Finalize method to be called after all events processed.
-         */
-        virtual bool finalize();
-
-    protected:
-        void DrawTrack(const std::vector<larlite::hit> HitCluster);
-
-        std::string _track_producer;
-        std::string _hit_producer;
-
-        ChimeraTrackEvaluator _evaluator;
-
-        TH1D *hX0;
-        TH1D *hY0;
-        TH1D *hZ0;
-        TH1D *hL0;
-        TH1D *hTheta0;
-        TH1D *hPhi0;
-
-        TH1D *hX;
-        TH1D *hY;
-        TH1D *hZ;
-        TH1D *hL;
-        TH1D *hTheta;
-        TH1D *hPhi;
-
-        TH1D *hScore;
-
-        int _run;
-        int _subrun;
-        int _event;
-        int _track;
-        double maxScore;
-        int bestRun;
-        int bestSubRun;
-        int bestEvent;
-        int bestTrackindex;
-
-        larlite::track bestTrack;
-        std::vector<larlite::hit> bestHitCluster;
-    };
-}
+private:
+    std::vector<larlite::track> _Tracks;
+    std::vector<std::vector<larlite::hit> > _HitClusters;
+    std::vector<std::vector<larlite::hit> > _translatedHitClusters;
+    TCanvas *cEventImage;
+    TH2D *hEventImage[3];
+    std::string _evtID;
+    TVector3 _X0;
+};
 #endif
