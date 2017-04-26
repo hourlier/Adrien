@@ -64,6 +64,18 @@ void ChimeraPatching::DrawEvent(){
     for(size_t iPlane=0;iPlane<3;iPlane++){
         std::cout << wirebounds[iPlane][0] << " => " << wirebounds[iPlane][1] << "\t" << timebounds[0] << " => " << timebounds[1] << std::endl;
     }
+    if(wirebounds[0][0] >= wirebounds[0][1] || timebounds[0] >= timebounds[1]){
+        std::cout << "ERROR! problem with the boundaries" << std::endl;
+        return;
+    }
+    if(wirebounds[1][0] >= wirebounds[1][1] || timebounds[0] >= timebounds[1]){
+        std::cout << "ERROR! problem with the boundaries" << std::endl;
+        return;
+    }
+    if(wirebounds[2][0] >= wirebounds[2][1] || timebounds[0] >= timebounds[1]){
+        std::cout << "ERROR! problem with the boundaries" << std::endl;
+        return;
+    }
 
     for(size_t iPlane = 0;iPlane<3;iPlane++){
         hEventImage[iPlane] = new TH2D(Form("hEventImage_%s_%zu",_evtID.c_str(),iPlane),Form("hEventImage_%s_%zu",_evtID.c_str(),iPlane),wirebounds[iPlane][1]-wirebounds[iPlane][0],wirebounds[iPlane][0],wirebounds[iPlane][1],timebounds[1]-timebounds[0],timebounds[0],timebounds[1]);

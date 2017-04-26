@@ -110,12 +110,13 @@ void ChimeraFinding::ReadTargetFile(){
     FullTargetParameters.clear();
     std::ifstream file(_TargetFile);
     if(!file){std::cout << "ERROR, could not open file" << std::endl;return;}
+    int Run, SubRun, Event;
     double X0,Y0,Z0,L_p,theta_p,phi_p,L_u,theta_u,phi_u;
     char coma;
     std::vector<double> eventTarget(9);
     bool goOn = true;
     while(goOn){
-        file >> X0 >> coma >> Y0 >> coma >> Z0 >> coma >> L_p >> coma >> theta_p >> coma >> phi_p >> coma >> L_u >> coma >> theta_u >> coma >> phi_u;
+        file >> Run >> coma >> SubRun >> coma >> Event >> coma >> X0 >> coma >> Y0 >> coma >> Z0 >> coma >> L_p >> coma >> theta_p >> coma >> phi_p >> coma >> L_u >> coma >> theta_u >> coma >> phi_u;
         eventTarget[0] = X0;
         eventTarget[1] = Y0;
         eventTarget[2] = Z0;
@@ -126,6 +127,7 @@ void ChimeraFinding::ReadTargetFile(){
         eventTarget[7] = theta_u;
         eventTarget[8] = phi_u;
         FullTargetParameters.push_back(eventTarget);
+        std::cout << Run << "\t" << SubRun << "\t" << Event << "\t";
         for(auto ipar:eventTarget){std::cout << ipar << "\t";}
         std::cout << std::endl;
         if(file.eof()){goOn=false;break;}
