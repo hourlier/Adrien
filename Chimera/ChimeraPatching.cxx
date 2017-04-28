@@ -15,29 +15,59 @@
 #include "TH2D.h"
 #include "TCanvas.h"
 #include "TStyle.h"
+#include "TLatex.h"
 
 #include "ChimeraPatching.h"
 
 double X2Tick(double x, size_t plane);
 
 void ChimeraPatching::Initialize(){
-    cEventImage = new TCanvas("cEventImage","cEventImage",1200,300);
-    cEventImage->Divide(3,1);
+    cEventImage = new TCanvas("cEventImage","cEventImage",2400,1200);
+    cEventImage->Divide(1,2);
+    cEventImage->cd(1)->Divide(3,1);
+    for(int i = 0;i<3;i++){
+        cEventImage->cd(1)->cd(i+1)->SetLogz();
+    }
+    _scoreLimit = 1e-10;
 }
 //_______________________________________________________________________
-void ChimeraPatching::AddTrack(larlite::track newTrack, std::vector<larlite::hit> newHitCluster){
+void ChimeraPatching::AddTrack(larlite::track newTrack, std::vector<larlite::hit> newHitCluster, double score){
     _Tracks.push_back(newTrack);
     _HitClusters.push_back(newHitCluster);
+    _scores.push_back(score);
 }
 //_______________________________________________________________________
-void ChimeraPatching::NewEvent(std::string evtID, TVector3 X0){
+void ChimeraPatching::NewEvent(std::string evtID, std::vector<double> parVector){
+    TVector3 X0(parVector[0],parVector[1],parVector[2]);
     _evtID = evtID;
     _Tracks.clear();
     _HitClusters.clear();
     _X0.SetXYZ(X0.X(),X0.Y(),X0.Z());
+    _L0.clear();
+    _theta0.clear();
+    _phi0.clear();
+    for(int i=0;i<_Npartperevent;i++){
+        _L0.push_back(parVector.at(3+i*3));
+        _theta0.push_back(parVector.at(4+i*3));
+        _phi0.push_back(parVector.at(5+i*3));
+    }
+    _scores.clear();
 }
 //_______________________________________________________________________
 void ChimeraPatching::DrawEvent(){
+    bool LowScore = false;
+    for(int iscore=0;iscore<_scores.size();iscore++){
+        if(_scores[iscore] < _scoreLimit){
+            //std::cout << "score too low" << std::endl;
+            LowScore = true;
+            break;
+        }
+    }
+    if(LowScore) return;
+    for(int iscore=0;iscore<_scores.size();iscore++){
+        std::cout << "Particle " << iscore+1 << " score : " << _scores[iscore] << std::endl;
+    }
+
     gStyle->SetOptStat(0);
     int timebounds[2] = {1000000,0};
     int wirebounds[3][2];
@@ -62,54 +92,74 @@ void ChimeraPatching::DrawEvent(){
     timebounds[1]+=margintime;
 
     for(size_t iPlane=0;iPlane<3;iPlane++){
-        std::cout << wirebounds[iPlane][0] << " => " << wirebounds[iPlane][1] << "\t" << timebounds[0] << " => " << timebounds[1] << std::endl;
+        //std::cout << wirebounds[iPlane][0] << " => " << wirebounds[iPlane][1] << "\t" << timebounds[0] << " => " << timebounds[1] << std::endl;
+        if(wirebounds[iPlane][0] >= wirebounds[iPlane][1] || timebounds[0] >= timebounds[1]){
+            std::cout << "ERROR! problem with the boundaries" << std::endl;
+            return;
+        }
     }
-    if(wirebounds[0][0] >= wirebounds[0][1] || timebounds[0] >= timebounds[1]){
-        std::cout << "ERROR! problem with the boundaries" << std::endl;
-        return;
-    }
-    if(wirebounds[1][0] >= wirebounds[1][1] || timebounds[0] >= timebounds[1]){
-        std::cout << "ERROR! problem with the boundaries" << std::endl;
-        return;
-    }
-    if(wirebounds[2][0] >= wirebounds[2][1] || timebounds[0] >= timebounds[1]){
-        std::cout << "ERROR! problem with the boundaries" << std::endl;
-        return;
-    }
+
 
     for(size_t iPlane = 0;iPlane<3;iPlane++){
         hEventImage[iPlane] = new TH2D(Form("hEventImage_%s_%zu",_evtID.c_str(),iPlane),Form("hEventImage_%s_%zu",_evtID.c_str(),iPlane),wirebounds[iPlane][1]-wirebounds[iPlane][0],wirebounds[iPlane][0],wirebounds[iPlane][1],timebounds[1]-timebounds[0],timebounds[0],timebounds[1]);
-        /*for(int icol=0;icol<hEventImage[iPlane]->GetNbinsX();icol++){
+        for(int icol=0;icol<hEventImage[iPlane]->GetNbinsX();icol++){
             for(int irow=0;irow<hEventImage[iPlane]->GetNbinsY();irow++){
-                hEventImage[iPlane]->SetBinContent(icol+1,irow+1,0.01);
+                hEventImage[iPlane]->SetBinContent(icol+1,irow+1,10);
             }
-        }*/
+        }
         for(size_t iCluster = 0;iCluster<_translatedHitClusters.size();iCluster++){
             for(auto h:_translatedHitClusters[iCluster]){
                 if(h.WireID().Plane!=iPlane)continue;
                 hEventImage[iPlane]->SetBinContent(h.WireID().Wire+1-wirebounds[iPlane][0],h.PeakTime()+1-timebounds[0],h.Integral());
             }
         }
-        cEventImage->cd(iPlane+1);
-        //hEventImage[iPlane]->Rebin2D(5,5);
+        cEventImage->cd(1)->cd(iPlane+1);
+        hEventImage[iPlane]->Rebin2D(1,1);
         hEventImage[iPlane]->Draw("colz");
     }
-    cEventImage->SaveAs(Form("ChimeraEvent_%s.pdf",_evtID.c_str()));
+
+    cEventImage->cd(2);
+    cEventImage->cd(2)->Clear();
+    TLatex tex;
+    tex.SetTextSize(0.07);
+    tex.SetTextAlign(11);
+    std::string particletype[3] = {"Proton","Muon","Electron"};
+    double Xtext[2] = {0.1,0.5};
+    for(int ipart = 0;ipart<_Npartperevent;ipart++){
+        tex.DrawLatex(Xtext[ipart],0.9,Form("%s track : ",particletype[ipart].c_str()));
+        tex.DrawLatex(Xtext[ipart],0.7,Form("vertex: (%.1f, %.1f, %.1f) #color[2]{/ (%.1f, %.1f, %.1f)}",_Tracks[ipart].Vertex().X(), _Tracks[ipart].Vertex().Y(),_Tracks[ipart].Vertex().Z(),_X0.X(), _X0.Y(),_X0.Z()));
+        tex.DrawLatex(Xtext[ipart],0.6,Form("(#theta, #phi) : (%.1f#circ, %.1f#circ) #color[2]{/ (%.1f#circ, %.1f#circ)}",_Tracks[ipart].Vertex().Theta()*180/3.14159, _Tracks[ipart].Vertex().Phi()*180/3.14159,_theta0[ipart]*180/3.14159,_phi0[ipart]*180/3.14159));
+        tex.DrawLatex(Xtext[ipart],0.5,Form("Length: %.1f cm #color[2]{/ %.1f cm}",_Tracks[ipart].Length(0),_L0[ipart]));
+        tex.DrawLatex(Xtext[ipart],0.4,Form("#DeltaR : %.f cm",sqrt(pow(_Tracks[ipart].Vertex().X()-_X0.X(),2)+pow(_Tracks[ipart].Vertex().Y()-_X0.Y(),2)+pow(_Tracks[ipart].Vertex().Z()-_X0.Z(),2))));
+        tex.DrawLatex(Xtext[ipart],0.3,Form("score : %.2e", _scores[ipart]));
+    }
+
+
+    cEventImage->SaveAs(Form("ChimeraEvent_%s.png",_evtID.c_str()));
 }
 //_______________________________________________________________________
 void ChimeraPatching::TranslateClusters(){
+    //std::cout << "\t" << "_HitClusters.size() = " << _HitClusters.size() << std::endl;
     _translatedHitClusters.resize(_HitClusters.size());
+    //std::cout << "\t" << "_translatedHitClusters.size() = " << _translatedHitClusters.size() << std::endl;
+
     for(size_t iTrack = 0;iTrack<_HitClusters.size();iTrack++){
+        //std::cout << "iTrack = " << iTrack << std::endl;
         _translatedHitClusters[iTrack].resize(_HitClusters[iTrack].size());
         std::vector<std::pair<double, double> > X0Proj(3);
         std::vector<std::pair<double, double> > VertexProj(3);
-        TVector3 thisvertex = _Tracks[iTrack].Vertex();
+        //std::cout << "_Tracks[iTrack].ID() = "  << _Tracks.at(iTrack).ID() << std::endl;
+        //std::cout << "_Tracks[iTrack].NumberTrajectoryPoints() = " << _Tracks.at(iTrack).NumberTrajectoryPoints() << std::endl;
+        if(_Tracks.at(iTrack).NumberTrajectoryPoints() == 0)return;
+        //std::cout << "_Tracks[iTrack].Vertex().X() = " << _Tracks.at(iTrack).Vertex().X() << std::endl;
+        //std::cout << "_Tracks[iTrack].Vertex().Y() = " << _Tracks.at(iTrack).Vertex().Y() << std::endl;
+        //std::cout << "_Tracks[iTrack].Vertex().Z() = " << _Tracks.at(iTrack).Vertex().Z() << std::endl;
         double dt[3],dw[3];
         for(size_t iPlane = 0;iPlane<3;iPlane++){
             X0Proj[iPlane].first  = X2Tick(_X0.X(),iPlane);
             X0Proj[iPlane].second = larutil::GeometryHelper::GetME()->Point_3Dto2D(_X0,iPlane).w / 0.3;
-            VertexProj[iPlane].first  = X2Tick(thisvertex.X(),iPlane);
-            VertexProj[iPlane].second = larutil::GeometryHelper::GetME()->Point_3Dto2D(thisvertex,iPlane).w / 0.3;
+            VertexProj[iPlane].first  = X2Tick(_Tracks[iTrack].Vertex().X(),iPlane);
+            VertexProj[iPlane].second = larutil::GeometryHelper::GetME()->Point_3Dto2D(_Tracks[iTrack].Vertex(),iPlane).w / 0.3;
 
             dt[iPlane] = VertexProj[iPlane].first-X0Proj[iPlane].first;
             dw[iPlane] = VertexProj[iPlane].second-X0Proj[iPlane].second;

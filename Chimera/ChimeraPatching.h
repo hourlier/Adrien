@@ -18,12 +18,15 @@ public:
     ChimeraPatching(){}
     virtual ~ChimeraPatching(){};
     void Initialize();
-    void AddTrack(larlite::track newTrack, std::vector<larlite::hit> newHitCluster);
+    void AddTrack(larlite::track newTrack, std::vector<larlite::hit> newHitCluster, double score);
     void DrawEvent();
-    void NewEvent(std::string evtID, TVector3 X0);
+    void NewEvent(std::string evtID, std::vector<double> parVector);
     void TranslateClusters();
+    void SetScoreLimit(double scoremin){_scoreLimit = scoremin;}
+    void SetNpartperevent(int Npart){_Npartperevent = Npart;}
 
 private:
+    std::vector<double> _scores;
     std::vector<larlite::track> _Tracks;
     std::vector<std::vector<larlite::hit> > _HitClusters;
     std::vector<std::vector<larlite::hit> > _translatedHitClusters;
@@ -31,5 +34,10 @@ private:
     TH2D *hEventImage[3];
     std::string _evtID;
     TVector3 _X0;
+    std::vector<double> _L0;
+    std::vector<double> _theta0;
+    std::vector<double> _phi0;
+    double _scoreLimit;
+    int _Npartperevent;
 };
 #endif

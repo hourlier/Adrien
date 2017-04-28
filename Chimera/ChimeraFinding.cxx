@@ -13,7 +13,9 @@
 
 bool ChimeraFinding::initialize(){
 
-    ReadTargetFile();
+    ReadTrackFile();
+    //ReadTargetFile();
+
     NrequestedEvents = FullTargetParameters.size();
     std::cout << NrequestedEvents << " events requested" << std::endl;
     _sigmaPar[0] =  10;                //σ_R
@@ -47,7 +49,12 @@ bool ChimeraFinding::analyze(larlite::storage_manager &storage){
     
     for(size_t track_index=0; track_index < ev_track->size(); ++track_index) {
         _track = track_index;
+        if(_particleType == "proton"){
+            if(!IsGoodTrack())continue;
+        }
+
         auto const& track = (*ev_track)[track_index];
+        if(track.NumberTrajectoryPoints() == 0)continue; // no poitns in track, not an interesting track
         //
         // Test that the track is a valid proton or muon track
 
@@ -100,9 +107,9 @@ bool ChimeraFinding::analyze(larlite::storage_manager &storage){
 }
 //______________________________________________________________________________________________________
 bool ChimeraFinding::finalize(){
-    for(int iTrack = 0; iTrack< _best_Track.size();iTrack++){
+    /*for(int iTrack = 0; iTrack< _best_Track.size();iTrack++){
         std::cout << "Track #" << iTrack << "  : L = " << _best_Track[iTrack].Length(0) << " cm, X0 = (" << _best_Track[iTrack].Vertex().X() << "," << _best_Track[iTrack].Vertex().Y() << "," << _best_Track[iTrack].Vertex().Z() << "), theta = " << _best_Track[iTrack].Theta()*180/TMath::Pi() << ", Phi = " << _best_Track[iTrack].Phi()*180/TMath::Pi() << "... score = " << _max_score[iTrack] << std::endl;
-    }
+    }*/
     return true;
 }
 //______________________________________________________________________________________________________
@@ -127,13 +134,77 @@ void ChimeraFinding::ReadTargetFile(){
         eventTarget[7] = theta_u;
         eventTarget[8] = phi_u;
         FullTargetParameters.push_back(eventTarget);
-        std::cout << Run << "\t" << SubRun << "\t" << Event << "\t";
+        /*std::cout << Run << "\t" << SubRun << "\t" << Event << "\t";
         for(auto ipar:eventTarget){std::cout << ipar << "\t";}
-        std::cout << std::endl;
+        std::cout << std::endl;*/
         if(file.eof()){goOn=false;break;}
     }
     file.close();
 }
 //______________________________________________________________________________________________________
+void ChimeraFinding::ReadTrackFile(){
+    if(_particleType == "proton"){ReadProtonTrackFile();}
+    else if(_particleType == "muon"){ReadMuonTrackFile();}
+    else {std::cout << "ERROR, particle type is not recognized" << std::endl;}
 
+}
+//______________________________________________________________________________________________________
+void ChimeraFinding::ReadProtonTrackFile(){
+    _SelectableTracks.clear();
+    std::vector<int> trackinfo(4);
+    std::ifstream file(_TrackFile);
+    if(!file){std::cout << "ERROR, could not open file of tracks to sort through" << std::endl;return;}
+    std::string firstline;
+    getline(file, firstline);
+    bool goOn = true;
+    int Run,SubRun,Event,TrackID,WireUMin,TimeUMin,WireUMax,TimeUMax,WireVMin,TimeVMin,WireVMax,TimeVMax,WireYMin,TimeYMin,WireYMax,TimeYMax;
+    double BDTScore;
+    while(goOn){
+        file >> Run >> SubRun >> Event >> TrackID >> WireUMin >> TimeUMin >> WireUMax >> TimeUMax >> WireVMin >> TimeVMin >> WireVMax >> TimeVMax >> WireYMin >> TimeYMin >> WireYMax >> TimeYMax >> BDTScore;
+        trackinfo[0] = Run;
+        trackinfo[1] = SubRun;
+        trackinfo[2] = Event;
+        trackinfo[3] = TrackID;
+        _SelectableTracks.push_back(trackinfo);
+        if(file.eof()){goOn=false;break;}
+    }
+}
+//______________________________________________________________________________________________________
+void ChimeraFinding::ReadMuonTrackFile(){
+    _SelectableTracks.clear();
+    std::vector<int> trackinfo(4);
+    std::ifstream file(_TrackFile);
+    std::cout << _TrackFile << std::endl;
+    if(!file){std::cout << "ERROR, could not open file of tracks to sort through" << std::endl;return;}
+
+    bool goOn = true;
+
+    int Run,SubRun,Event,decayIdx,Ntracks,trackIndex,Ymin,Tmin,Ymax,Tmax;
+    char coma;
+
+    while(goOn){
+        file >> Run >> coma >> SubRun >> coma >> Event >> coma >> decayIdx >> coma >> Ntracks;
+        if(Ntracks == 0){continue;}
+        else{
+            for(int iTrack = 0;iTrack < Ntracks;iTrack++){
+                file >> coma >> trackIndex >> coma >> Ymin >> coma >> Tmin >> coma >> Ymax >> coma >> Tmax;
+                if(file.eof()){goOn = false;return;}
+                trackinfo[0] = Run;
+                trackinfo[1] = SubRun;
+                trackinfo[2] = Event;
+                trackinfo[3] = trackIndex;
+                _SelectableTracks.push_back(trackinfo);
+            }
+        }
+        if(file.eof()){goOn=false;break;}
+    }
+}
+//______________________________________________________________________________________________________
+bool ChimeraFinding::IsGoodTrack(){
+    for(auto trackinfo:_SelectableTracks){
+        if(_run != trackinfo[0] && _subrun == trackinfo[1] && _event == trackinfo[2] && _track == trackinfo[3]){return true;}
+    }
+    return false;
+}
+//______________________________________________________________________________________________________
 #endif

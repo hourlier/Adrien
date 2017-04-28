@@ -27,8 +27,10 @@ public:
     inline void SetTrackGenerator(std::string trackGenerator){_TrackGenerator = trackGenerator;}
     inline void SetHitGenerator(std::string hitGenerator){_HitGenerator = hitGenerator;}
     inline void SetInputFile(std::string inputFile){_InputFile = inputFile;}
+    inline void SetTrackFile(std::string trackfile){_TrackFile = trackfile;}
     inline void SetParticleType(std::string particleType){_particleType = particleType;}
     inline void SetSigmaEval(double *sigmaPar){for(int ipar = 0;ipar<3;ipar++){_sigmaPar[ipar] = sigmaPar[ipar];} }
+    inline void SetTargetVector(const std::vector<std::vector<double> > &targetvector){FullTargetParameters = targetvector;}
 
     inline std::vector<double>                     GetScores(){return _max_score;}
     inline std::vector<larlite::track>             GetBestTracks(){return _best_Track;}
@@ -38,6 +40,10 @@ public:
 
 protected:
     void ReadTargetFile();
+    void ReadTrackFile();
+    void ReadProtonTrackFile();
+    void ReadMuonTrackFile();
+    bool IsGoodTrack();
 
 private:
     int _run;
@@ -55,12 +61,14 @@ private:
     std::vector<int> _best_track_id;
     std::vector<larlite::track> _best_Track;
     std::vector<std::vector<larlite::hit> > _best_HitCluster;
+    std::vector<std::vector<int> > _SelectableTracks;
 
     std::string _TargetFile;
     std::string _InputFile;
     std::string _TrackGenerator;
     std::string _HitGenerator;
     std::string _particleType;
+    std::string _TrackFile;
 
     std::vector<std::vector<double> > FullTargetParameters;
     larlite::ChimeraTrackEvaluator evaluator;

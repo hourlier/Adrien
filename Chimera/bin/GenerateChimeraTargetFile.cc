@@ -1,3 +1,4 @@
+// compile with g++ GenerateChimeraTargetFile.cc -o newTargetFile
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
@@ -54,13 +55,13 @@ int main(int argc, char **argv){
     double pi = acos(-1.);
     srand(time(NULL));
     std::default_random_engine generator;
-    std::normal_distribution<double> distribLength(10.0,3.0);
+    std::normal_distribution<double> distribLength(10.0,5.0);
     std::normal_distribution<double> distribTheta(pi/4.,pi/8.);
     std::normal_distribution<double> distribPhi(pi/2.,pi/4.);
 
     std::ofstream targetfile(filename,std::ofstream::app);
     if(!targetfile){std::cout << "ERROR, could not open the output file" << std::endl;return 0;}
-
+    if(Event!=1)targetfile << std::endl;
     for(int ievt = 0;ievt<Nevt;ievt++){
         Event++;
         if(Event == 10000){
@@ -79,6 +80,7 @@ int main(int argc, char **argv){
         }
         for(int ipart = 0;ipart<Npart;ipart++){
             L[ipart] = distribLength(generator);
+            while (L[ipart]<6) {L[ipart] = distribLength(generator);}
 
             theta[ipart] = distribTheta(generator);
             while(theta[ipart] > pi/2.){theta[ipart]-=pi/2.;}
@@ -92,7 +94,7 @@ int main(int argc, char **argv){
             targetfile << ",  " << L[ipart] << ",  " << theta[ipart] << ",  " << phi[ipart];
 
         }
-        targetfile << std::endl;
+        if(ievt < Nevt-1)targetfile << std::endl;
     }
 
     targetfile.close();
