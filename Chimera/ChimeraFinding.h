@@ -31,6 +31,7 @@ public:
     inline void SetParticleType(std::string particleType){_particleType = particleType;}
     inline void SetSigmaEval(double *sigmaPar){for(int ipar = 0;ipar<3;ipar++){_sigmaPar[ipar] = sigmaPar[ipar];} }
     inline void SetTargetVector(const std::vector<std::vector<double> > &targetvector){FullTargetParameters = targetvector;}
+    inline void SetPartIndex(int particleIndex){_particleIndex = particleIndex;}
 
     inline std::vector<double>                     GetScores(){return _max_score;}
     inline std::vector<larlite::track>             GetBestTracks(){return _best_Track;}
@@ -50,6 +51,7 @@ private:
     int _subrun;
     int _event;
     int _track;
+    int _particleIndex;
     size_t NrequestedEvents;
     double _sigmaPar[3];
 

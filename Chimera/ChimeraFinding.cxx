@@ -8,8 +8,17 @@
 #include "DataFormat/track.h"
 #include "DataFormat/storage_manager.h"
 
+#include "LArUtil/Geometry.h"
+#include "LArUtil/GeometryHelper.h"
+#include "LArUtil/TimeService.h"
+
 #include "ChimeraFinding.h"
 #include "ChimeraTrackEvaluator.h"
+#include "ChimeraUtils.h"
+
+#include "TVector3.h"
+
+
 
 bool ChimeraFinding::initialize(){
 
@@ -53,7 +62,7 @@ bool ChimeraFinding::analyze(larlite::storage_manager &storage){
             if(!IsGoodTrack())continue;
         }
 
-        auto const& track = (*ev_track)[track_index];
+        auto /*const&*/ track = (*ev_track)[track_index];
         if(track.NumberTrajectoryPoints() == 0)continue; // no poitns in track, not an interesting track
         //
         // Test that the track is a valid proton or muon track
@@ -70,33 +79,62 @@ bool ChimeraFinding::analyze(larlite::storage_manager &storage){
             parTargets[0] = FullTargetParameters[itarget][0];
             parTargets[1] = FullTargetParameters[itarget][1];
             parTargets[2] = FullTargetParameters[itarget][2];
-            if(_particleType == "proton"){
-                parTargets[3] = FullTargetParameters[itarget][3];
-                parTargets[4] = FullTargetParameters[itarget][4];
-                parTargets[5] = FullTargetParameters[itarget][5];
-            }
-            else if(_particleType == "muon"){
-                parTargets[3] = FullTargetParameters[itarget][6];
-                parTargets[4] = FullTargetParameters[itarget][7];
-                parTargets[5] = FullTargetParameters[itarget][8];
-            }
-            else{
-                std::cout << "ERROR : Particle type not specified" << std::endl;
-            }
+            parTargets[3] = FullTargetParameters[itarget][3+3*_particleIndex];
+            parTargets[4] = FullTargetParameters[itarget][4+3*_particleIndex];
+            parTargets[5] = FullTargetParameters[itarget][5+3*_particleIndex];
             evaluator.SetTargets(parTargets);
             evaluator.SetSigmas(_sigmaPar);
-
-            score[itarget] = evaluator.EvalTrack(track);
+            
+            score[itarget] = evaluator.EvalTrack(track,_particleType);
             //std::cout << itarget << "\t" << score[itarget] << "\t" << track.Vertex().X() << std::endl;
             if(score[itarget] > _max_score[itarget]){
+
                 _max_score[itarget]=score[itarget];
                 _best_run[itarget] = _run;
                 _best_subrun[itarget] = _subrun;
                 _best_event[itarget] = _event;
                 _best_track_id[itarget] = _track;
                 _best_Track[itarget] = track;
+
+                if(_particleType == "muon"){
+                    //std::cout << "new best muon track" << std::endl;
+                    larlite::track muonTrack;
+                    int newNpoints = 0;
+                    while(track.Length(0)-track.Length(newNpoints)<parTargets[3] && newNpoints<track.NumberTrajectoryPoints()){newNpoints++;}
+                    if(newNpoints >= track.NumberTrajectoryPoints()){newNpoints = track.NumberTrajectoryPoints()-1;}
+                    //std::cout << "newNpoints = " << newNpoints  << " and original track has " << track.NumberTrajectoryPoints() << std::endl;
+
+                    for(int ipoint = 0;ipoint<newNpoints;ipoint++){
+                        //std::cout << newNpoints-ipoint << "/" << track.NumberTrajectoryPoints() << std::endl;
+                        muonTrack.add_vertex(track.LocationAtPoint(newNpoints-ipoint));
+                        TVector3 newDirection(-track.DirectionAtPoint(newNpoints-ipoint).X(),-track.DirectionAtPoint(newNpoints-ipoint).Y(),-track.DirectionAtPoint(newNpoints-ipoint).Z());
+                        muonTrack.add_direction(newDirection);
+                    }
+                    _best_Track[itarget] = muonTrack;
+                    //std::cout << "new muon tracks OK" << std::endl;
+                }
                 for(auto const& hit_index : track_to_hit[track_index]) {
-                    thistrackhits.push_back( (*ev_hit)[hit_index] );
+                    if(_particleType == "muon"){
+                        bool pixelProjectsOnNewTrack = false;
+                        int iPlane =(*ev_hit)[hit_index].WireID().Plane;
+                        for (int ipoint = 1;ipoint<_best_Track[itarget].NumberTrajectoryPoints();ipoint++){
+
+                            double X0 = larutil::GeometryHelper::GetME()->Point_3Dto2D(_best_Track[itarget].LocationAtPoint(ipoint-1),iPlane).w / 0.3;
+                            double Y0 = X2Tick(_best_Track[itarget].LocationAtPoint(ipoint-1).X(),iPlane);
+
+                            double X1 = larutil::GeometryHelper::GetME()->Point_3Dto2D(_best_Track[itarget].LocationAtPoint(ipoint),iPlane).w / 0.3;
+                            double Y1 = X2Tick(_best_Track[itarget].LocationAtPoint(ipoint).X(),iPlane);
+
+                            double X2 = (*ev_hit)[hit_index].WireID().Wire;
+                            double Y2 = (*ev_hit)[hit_index].PeakTime();
+
+                            if(((X1-X0)*(X2-X0)+(Y1-Y0)*(Y2-Y0))/(pow((X1-X0),2)+pow((Y1-Y0),2)) >=0 && ((X1-X0)*(X2-X0)+(Y1-Y0)*(Y2-Y0))/(pow((X1-X0),2)+pow((Y1-Y0),2)) <= 1){pixelProjectsOnNewTrack = true; break;}
+                            }
+                        if(pixelProjectsOnNewTrack == true)thistrackhits.push_back( (*ev_hit)[hit_index] );
+                    }
+                    else{
+                        thistrackhits.push_back( (*ev_hit)[hit_index] );
+                    }
                 }
                 //std::cout << thistrackhits.size() << std::endl;
                 _best_HitCluster[itarget] = thistrackhits;
@@ -107,9 +145,6 @@ bool ChimeraFinding::analyze(larlite::storage_manager &storage){
 }
 //______________________________________________________________________________________________________
 bool ChimeraFinding::finalize(){
-    /*for(int iTrack = 0; iTrack< _best_Track.size();iTrack++){
-        std::cout << "Track #" << iTrack << "  : L = " << _best_Track[iTrack].Length(0) << " cm, X0 = (" << _best_Track[iTrack].Vertex().X() << "," << _best_Track[iTrack].Vertex().Y() << "," << _best_Track[iTrack].Vertex().Z() << "), theta = " << _best_Track[iTrack].Theta()*180/TMath::Pi() << ", Phi = " << _best_Track[iTrack].Phi()*180/TMath::Pi() << "... score = " << _max_score[iTrack] << std::endl;
-    }*/
     return true;
 }
 //______________________________________________________________________________________________________
@@ -207,4 +242,5 @@ bool ChimeraFinding::IsGoodTrack(){
     return false;
 }
 //______________________________________________________________________________________________________
+
 #endif

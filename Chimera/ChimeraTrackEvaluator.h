@@ -1,6 +1,8 @@
 #ifndef LARLITE_CHIMERATRACKEVALUATOR_H
 #define LARLITE_CHIMERATRACKEVALUATOR_H
 
+#include <string>
+
 #include "Analysis/ana_base.h"
 #include "DataFormat/track.h"
 
@@ -22,7 +24,9 @@ namespace larlite {
         std::vector<double> GetSigmas();
         void SetEval(double *parTarget, double *parSigma);
         /// Evaluate Track
-        double EvalTrack(larlite::track thisTrack);
+        double EvalTrack(larlite::track thisTrack, std::string particleType);
+        double EvalTrackProton(larlite::track thisTrack);
+        double EvalTrackMuon(larlite::track thisTrack);
 
         double GetScoreR()    {return _score_R;     }
         double GetScoreL()    {return _score_length;}

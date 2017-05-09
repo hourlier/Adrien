@@ -14,28 +14,13 @@ int main(int argc, char **argv){
     int event = 0;
     int subrun = 1;
     int run = 1;
-    std::ifstream inputfile(filename);
-    if(!inputfile){std::cout << "ERROR, could not open the input file, will start with a new file" << std::endl;}
-    else{
-        int run,subrun;
-        double X,Y,Z,Length;
-        double Theta, Phi;
-        char coma;
-        bool goOn = true;
-        while(goOn){
-            inputfile >> run >> coma >> subrun >> coma >> event >> coma >> X >> coma >> Y >> coma >> Z >> coma >> Length >> coma >> Theta >> coma >> Phi >> coma >> Length >> coma >> Theta >> coma>> Phi;
-            if(inputfile.eof()){goOn=false;break;}
-        }
-        std::cout << "last event was " << run << ", " << subrun << ", " << event << std::endl;
-        event++;
-        inputfile.close();
-    }
 
 
     int Nevt  = 10;
     int Npart = 2;
 
     if(argc >= 2){Nevt  = atoi(argv[1]);}
+    if(argc >= 3){Npart = atoi(argv[2]);}
 
     std::pair<int,int> Xdet[3];
     Xdet[0].first = 0;
@@ -59,7 +44,7 @@ int main(int argc, char **argv){
     std::normal_distribution<double> distribTheta(pi/4.,pi/8.);
     std::normal_distribution<double> distribPhi(pi/2.,pi/4.);
 
-    std::ofstream targetfile(filename,std::ofstream::app);
+    std::ofstream targetfile(filename);
     if(!targetfile){std::cout << "ERROR, could not open the output file" << std::endl;return 0;}
     if(Event!=1)targetfile << std::endl;
     for(int ievt = 0;ievt<Nevt;ievt++){
@@ -92,8 +77,8 @@ int main(int argc, char **argv){
             phi[ipart]-=pi/2.;
 
             targetfile << ",  " << L[ipart] << ",  " << theta[ipart] << ",  " << phi[ipart];
-
         }
+        targetfile << " z";
         if(ievt < Nevt-1)targetfile << std::endl;
     }
 

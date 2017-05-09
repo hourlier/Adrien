@@ -13,9 +13,11 @@
 #include "TVector3.h"
 
 std::vector<std::vector<double> > ReadTargetFile(std::string _TargetFile, int Nevt);
+void EndOfCode();
 
 int main(int nargs, char** argv){
     int Nevt = -1;
+
     if(nargs > 1){
         Nevt = atoi(argv[1]);
     }
@@ -31,14 +33,15 @@ int main(int nargs, char** argv){
 
     std::string targetfilename = basedir+"/mylarlite/UserDev/Adrien/Chimera/bin/Target.csv";
 
-    int NparticlesInEvt = 2;
-
     std::vector<std::vector<double> > Scores;
     std::vector<std::vector<std::vector<larlite::hit> > > BestHitClusters;
     std::vector<std::vector<larlite::track> > BestTracks;
 
-    std::vector< larlite::storage_manager > storage(2);
-    std::vector< ChimeraFinding > findTrack(2);
+
+    int NparticlesInEvt = 2;
+    if(nargs > 2){
+        NparticlesInEvt = nargs - 2;
+    }
 
     std::vector<std::string> larliteInputFile(2);
     larliteInputFile[0] = protonfilename;
@@ -57,19 +60,41 @@ int main(int nargs, char** argv){
     trackGenerator[1] = "trackkalmanhit";
     //trackGenerator[1] = "pandoraNu";
 
-    if(NparticlesInEvt > larliteInputFile.size() || NparticlesInEvt > TrackFile.size()){
-        std::cout << "ERROR : not enough input files" << std::endl;
-        return 0;
+    std::vector< larlite::storage_manager > storage(NparticlesInEvt);
+    std::vector< ChimeraFinding > findTrack(NparticlesInEvt);
+    std::vector< std::vector<std::string> > TypeParticle(NparticlesInEvt);
+    std::vector<std::vector<double> > parSigmas(NparticlesInEvt);
+
+    std::vector<double> parSigmasProton(3); parSigmasProton[0] = 10;parSigmasProton[1] = 0.1; parSigmasProton[2] = 10*TMath::Pi()/180.; //σ_R, σ_L,  σ_angles
+    std::vector<double> parSigmasMuon(3);   parSigmasMuon[0] =1000;   parSigmasMuon[1] = 2.;    parSigmasMuon[2] = 10*TMath::Pi()/180.; //σ_R, σ_L,  σ_angles
+
+    for(int ipart = 0;ipart<NparticlesInEvt;ipart++){
+        int partIndex;
+        if((std::string)argv[ipart+2] == "proton"){   partIndex = 0; parSigmas[ipart] = parSigmasProton;}
+        else if((std::string)argv[ipart+2] == "muon"){partIndex = 1; parSigmas[ipart] = parSigmasMuon;}
+        else{std::cout << "ERROR, not recognized particle type : " << argv[ipart+2] << std::endl;return 1;}
+        TypeParticle[ipart].resize(4);
+        TypeParticle[ipart][0] = argv[ipart+2];               // particle type
+        TypeParticle[ipart][1] = trackGenerator[partIndex];   // track generator
+        TypeParticle[ipart][2] = larliteInputFile[partIndex]; // input file
+        TypeParticle[ipart][3] = TrackFile[partIndex];        // track selection file
+    }
+    for(int ipart = 0;ipart<NparticlesInEvt;ipart++){
+        std::cout << TypeParticle[ipart][0] << std::endl;
     }
 
-    std::vector<std::vector<double> > parSigmas(2);
-    std::vector<double> parSigmasProton(3); parSigmasProton[0] = 10;parSigmasProton[1] = 0.1; parSigmasProton[2] = 10*TMath::Pi()/180.; //σ_R, σ_L,  σ_angles
-    std::vector<double> parSigmasMuon(3);   parSigmasMuon[0] =100;   parSigmasMuon[1] = 2.;    parSigmasMuon[2] = 90*TMath::Pi()/180.; //σ_R, σ_L,  σ_angles
-    parSigmas[0] = parSigmasProton;
-    parSigmas[1] = parSigmasMuon;
+    //if(NparticlesInEvt > larliteInputFile.size()){std::cout << "ERROR : not enough input files" << std::endl;return 2;}
+    //if(NparticlesInEvt > TrackFile.size()){std::cout << "ERROR : not enough input files" << std::endl;return 2;}
+
+    //=====================
+    //=====================
+    // Read Track File ====
+    //=====================
+    //=====================
 
     std::vector<std::vector<double> > FullTargetParameters = ReadTargetFile(targetfilename, Nevt);
-    if(FullTargetParameters.size() == 0){std::cout << "ERROR, empty target vector" << std::endl;return 0;}
+    if(FullTargetParameters.size() == 0){std::cout << "ERROR, empty target vector" << std::endl;return 3;}
+    if(FullTargetParameters[0].size() < 3+3*NparticlesInEvt){std::cout << "ERROR : Target file cannot handle " << NparticlesInEvt << " particle per events for now" << std::endl; return 4;}
 
     //=====================
     //=====================
@@ -79,15 +104,16 @@ int main(int nargs, char** argv){
 
     for(int ipart = 0;ipart<NparticlesInEvt;ipart++){
 
-        std::cout << "Read " << particleType[ipart] << " file" << std::endl;
+        std::cout << "Read " << TypeParticle[ipart][0] << " file" << std::endl;
         storage[ipart].set_verbosity(larlite::msg::kNORMAL);
         storage[ipart].set_io_mode(larlite::storage_manager::kREAD);
-        storage[ipart].add_in_filename(larliteInputFile[ipart]);
+
+        storage[ipart].add_in_filename(TypeParticle[ipart][2]);
         storage[ipart].open();
 
         if(!storage[ipart].is_open()){
             std::cerr << "File open failed!" << std::endl;
-            return 0;
+            return 5;
         }
         if(!storage[ipart].is_ready_io()){
             std::cerr << "I/O preparation failed!" << std::endl;
@@ -95,9 +121,10 @@ int main(int nargs, char** argv){
 
         findTrack[ipart].SetTargetFile(targetfilename);
         findTrack[ipart].SetTargetVector(FullTargetParameters);
-        findTrack[ipart].SetTrackFile(TrackFile[ipart]);
-        findTrack[ipart].SetTrackGenerator(trackGenerator[ipart]);
-        findTrack[ipart].SetParticleType(particleType[ipart]);
+        findTrack[ipart].SetTrackFile(TypeParticle[ipart][3]);
+        findTrack[ipart].SetTrackGenerator(TypeParticle[ipart][1]);
+        findTrack[ipart].SetParticleType(TypeParticle[ipart][0]);
+        findTrack[ipart].SetPartIndex(ipart);
         findTrack[ipart].initialize();
         double sigmaParameters[3] = {parSigmas[ipart][0],parSigmas[ipart][1],parSigmas[ipart][2]};
         findTrack[ipart].SetSigmaEval(sigmaParameters);
@@ -114,34 +141,41 @@ int main(int nargs, char** argv){
         BestTracks.push_back(findTrack[ipart].GetBestTracks());
         
         findTrack[ipart].finalize();
+        storage[ipart].close();
     }
+
+    std::cout << "Read all input files, found tracks, ready to plot" << std::endl;
 
     //=====================
     //=====================
     // Print Chimera Evt ==
     //=====================
     //=====================
-    if(BestHitClusters.size() == 0){std::cout << "ERROR : not Hit cluster found" << std::endl;return 0;}
-    if(BestTracks.size() == 0){std::cout << "ERROR : not Tracks found" << std::endl;return 0;}
+    if(BestHitClusters.size() == 0){std::cout << "ERROR : not Hit cluster found" << std::endl;return 6;}
+    if(BestTracks.size() == 0){std::cout << "ERROR : not Tracks found" << std::endl;return 7;}
 
     ChimeraPatching patch;
     int Npart = Scores.size();
     patch.Initialize();
     patch.SetNpartperevent(NparticlesInEvt);
-    patch.SetScoreLimit(1e-8);
+    std::vector<std::string> partypes(NparticlesInEvt);
+    for(int ipart = 0;ipart<NparticlesInEvt;ipart++){
+        partypes[ipart] = TypeParticle[ipart][0];
+    }
+    patch.SetPartTypes(partypes);
+    patch.SetScoreLimit(1e-12);
     std::string evtID;
+    std::cout << "about to set tracks to plot" << std::endl;
     for(int ipart = 0;ipart<Npart-1;ipart++){
         if(BestHitClusters[ipart].size()!=BestHitClusters[ipart+1].size()
            || BestHitClusters[ipart].size()!=BestTracks[ipart].size()
            || BestHitClusters[ipart].size()!=BestTracks[ipart+1].size()){
             std::cout << "ERROR : not the same number of tracks and hit clusters" << std::endl;
-            return 0;
+            return 8;
         }
     }
 
     for(int iEvt = 0;iEvt<BestHitClusters[0].size();iEvt++){
-        //std::cout << "Drawing event #" << iEvt << std::endl;
-        //std::cout << "X0 set" << std::endl;
         evtID = Form("1_0_%03d",iEvt);
         patch.NewEvent(evtID,FullTargetParameters.at(iEvt));
         for(int ipart=0;ipart<Npart;ipart++){
@@ -150,6 +184,13 @@ int main(int nargs, char** argv){
         patch.TranslateClusters();
         patch.DrawEvent();
     }
+
+    //=====================
+    //=====================
+    // End of main    =====
+    //=====================
+    //=====================
+    EndOfCode();
     return 0;
 }
 
@@ -159,29 +200,40 @@ std::vector<std::vector<double> > ReadTargetFile(std::string _TargetFile, int Ne
     std::ifstream file(_TargetFile);
     if(!file){std::cout << "ERROR, could not open file" << std::endl;return FullTargetParameters;}
     int Run, SubRun, Event;
-    double X0,Y0,Z0,L_p,theta_p,phi_p,L_u,theta_u,phi_u;
+    double X0,Y0,Z0,L,theta,phi;
     char coma;
-    std::vector<double> eventTarget(9);
+    std::vector<double> eventTarget;
     bool goOn = true;
     int nevtfound = 0;
     while(goOn && nevtfound < Nevt){
-        file >> Run >> coma >> SubRun >> coma >> Event >> coma >> X0 >> coma >> Y0 >> coma >> Z0 >> coma >> L_p >> coma >> theta_p >> coma >> phi_p >> coma >> L_u >> coma >> theta_u >> coma >> phi_u;
-        eventTarget[0] = X0;
-        eventTarget[1] = Y0;
-        eventTarget[2] = Z0;
-        eventTarget[3] = L_p;
-        eventTarget[4] = theta_p;
-        eventTarget[5] = phi_p;
-        eventTarget[6] = L_u;
-        eventTarget[7] = theta_u;
-        eventTarget[8] = phi_u;
+        eventTarget.clear();
+        file >> Run >> coma >> SubRun >> coma >> Event >> coma >> X0 >> coma >> Y0 >> coma >> Z0 >> coma;
+        eventTarget.push_back(X0);
+        eventTarget.push_back(Y0);
+        eventTarget.push_back(Z0);
+        while(coma != 'z'){
+            file >> L >> coma >> theta >> coma >> phi >> coma;
+            eventTarget.push_back(L);
+            eventTarget.push_back(theta);
+            eventTarget.push_back(phi) ;
+        }
         FullTargetParameters.push_back(eventTarget);
         nevtfound++;
-        /*std::cout << Run << "\t" << SubRun << "\t" << Event << "\t";
-         for(auto ipar:eventTarget){std::cout << ipar << "\t";}
-         std::cout << std::endl;*/
+
         if(file.eof()){goOn=false;break;}
     }
     file.close();
     return FullTargetParameters;
+}
+
+void EndOfCode(){
+    std::cout << "=================" << std::endl << std::endl;
+    std::cout << "Known issues to be addressed : " << std::endl;
+    std::cout << "\t 1) : Muon track is going the wrong way" << std::endl;
+    std::cout << "\t 2) : Charge deposition at vertex may not be the exact sum of ionization by each individual particles" << std::endl;
+    std::cout << "\t 3) : How to save the event?" << std::endl;
+    std::cout << std::endl;
+    std::cout << "=================" << std::endl;
+    std::cout << "Gracefuly stopped" << std::endl;
+    std::cout << "=================" << std::endl;
 }
