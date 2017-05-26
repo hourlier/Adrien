@@ -229,7 +229,7 @@ std::vector<std::vector<double> > ReadTargetFile(std::string _TargetFile, int Ne
 void EndOfCode(){
     std::cout << "=================" << std::endl << std::endl;
     std::cout << "Known issues to be addressed : " << std::endl;
-    std::cout << "\t 1) : Muon track is going the wrong way" << std::endl;
+    std::cout << "\t 1) : Track reconstruction sometimes clearly doesn't fit the hit distribution, can I do something about it?" << std::endl;
     std::cout << "\t 2) : Charge deposition at vertex may not be the exact sum of ionization by each individual particles" << std::endl;
     std::cout << "\t 3) : How to save the event?" << std::endl;
     std::cout << std::endl;

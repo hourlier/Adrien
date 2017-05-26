@@ -22,6 +22,8 @@ int main(int argc, char **argv){
     if(argc >= 2){Nevt  = atoi(argv[1]);}
     if(argc >= 3){Npart = atoi(argv[2]);}
 
+    std::cout << "Generating Target.csv for " << Nevt << " events and " << Npart << " particles per events" << std::endl;
+
     std::pair<int,int> Xdet[3];
     Xdet[0].first = 0;
     Xdet[0].second = 250;
@@ -40,9 +42,9 @@ int main(int argc, char **argv){
     double pi = acos(-1.);
     srand(time(NULL));
     std::default_random_engine generator;
-    std::normal_distribution<double> distribLength(10.0,5.0);
-    std::normal_distribution<double> distribTheta(pi/4.,pi/8.);
-    std::normal_distribution<double> distribPhi(pi/2.,pi/4.);
+    //std::normal_distribution<double> distribLength(10.0,5.0);
+    //std::normal_distribution<double> distribTheta(pi/4.,pi/8.);
+    //std::normal_distribution<double> distribPhi(pi/2.,pi/4.);
 
     std::ofstream targetfile(filename);
     if(!targetfile){std::cout << "ERROR, could not open the output file" << std::endl;return 0;}
@@ -60,12 +62,18 @@ int main(int argc, char **argv){
         }
         targetfile << Run << ",  " << SubRun << ",  " << Event;
         for(int dim=0;dim<3;dim++){
-            X0[dim] = rand()%(Xdet[dim].second-Xdet[dim].first)-Xdet[dim].first;
+            X0[dim] = rand()%(Xdet[dim].second-Xdet[dim].first)+Xdet[dim].first;
+            //X0[dim] = (rand()%1)*2;
             targetfile <<",  "<< X0[dim];
         }
         for(int ipart = 0;ipart<Npart;ipart++){
+
+            std::normal_distribution<double> distribLength(10.0,5.0);
+            std::normal_distribution<double> distribTheta(pi/4.,pi/8.);
+            std::normal_distribution<double> distribPhi(pi/2.,pi/4.);
+
             L[ipart] = distribLength(generator);
-            while (L[ipart]<6) {L[ipart] = distribLength(generator);}
+            while (L[ipart]<2) {L[ipart] = distribLength(generator);}
 
             theta[ipart] = distribTheta(generator);
             while(theta[ipart] > pi/2.){theta[ipart]-=pi/2.;}

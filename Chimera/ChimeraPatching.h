@@ -29,6 +29,7 @@ public:
 private:
     std::vector<double> _scores;
     std::vector<larlite::track> _Tracks;
+    std::vector<larlite::track> _translatedTracks;
     std::vector<std::vector<larlite::hit> > _HitClusters;
     std::vector<std::vector<larlite::hit> > _translatedHitClusters;
     TCanvas *cEventImage;

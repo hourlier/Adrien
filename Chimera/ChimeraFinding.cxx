@@ -23,7 +23,6 @@
 bool ChimeraFinding::initialize(){
 
     ReadTrackFile();
-    //ReadTargetFile();
 
     NrequestedEvents = FullTargetParameters.size();
     std::cout << NrequestedEvents << " events requested" << std::endl;
@@ -94,7 +93,6 @@ bool ChimeraFinding::analyze(larlite::storage_manager &storage){
                 _best_subrun[itarget] = _subrun;
                 _best_event[itarget] = _event;
                 _best_track_id[itarget] = _track;
-                _best_Track[itarget] = track;
 
                 if(_particleType == "muon"){
                     //std::cout << "new best muon track" << std::endl;
@@ -113,14 +111,39 @@ bool ChimeraFinding::analyze(larlite::storage_manager &storage){
                     _best_Track[itarget] = muonTrack;
                     //std::cout << "new muon tracks OK" << std::endl;
                 }
-                for(auto const& hit_index : track_to_hit[track_index]) {
+                else{
+                    _best_Track[itarget] = track;
+                }
+                if(_particleType == "muon"){
+                    for (int ipoint = 1;ipoint<_best_Track[itarget].NumberTrajectoryPoints();ipoint++){
+                        for(int iPlane = 0;iPlane<3;iPlane++){
+                            double X0 = larutil::GeometryHelper::GetME()->Point_3Dto2D(_best_Track[itarget].LocationAtPoint(ipoint-1),iPlane).w / 0.3;
+                            double Y0 = X2Tick(_best_Track[itarget].LocationAtPoint(ipoint-1).X(),iPlane);
+                            double X1 = larutil::GeometryHelper::GetME()->Point_3Dto2D(_best_Track[itarget].LocationAtPoint(ipoint),iPlane).w / 0.3;
+                            double Y1 = X2Tick(_best_Track[itarget].LocationAtPoint(ipoint).X(),iPlane);
+                            for(auto const& hit_index : track_to_hit[track_index]) {
+                                if((*ev_hit)[hit_index].WireID().Plane != iPlane)continue;
+                                bool pixelProjectsOnNewTrack = false;
+                                double X2 = (*ev_hit)[hit_index].WireID().Wire;
+                                double Y2 = (*ev_hit)[hit_index].PeakTime();
+                                if(((X1-X0)*(X2-X0)+(Y1-Y0)*(Y2-Y0))/(pow((X1-X0),2)+pow((Y1-Y0),2)) >=0 && ((X1-X0)*(X2-X0)+(Y1-Y0)*(Y2-Y0))/(pow((X1-X0),2)+pow((Y1-Y0),2)) <= 1){pixelProjectsOnNewTrack = true;}
+                                if(pixelProjectsOnNewTrack == true)thistrackhits.push_back( (*ev_hit)[hit_index] );
+                            }
+
+                        }
+                    }
+
+                }
+                else{
+                    for(auto const& hit_index : track_to_hit[track_index]) {
+                        thistrackhits.push_back( (*ev_hit)[hit_index] );
+                    }
+                }
+                /*for(auto const& hit_index : track_to_hit[track_index]) {
                     if(_particleType == "muon"){
                         bool pixelProjectsOnNewTrack = false;
                         int iPlane =(*ev_hit)[hit_index].WireID().Plane;
                         for (int ipoint = 1;ipoint<_best_Track[itarget].NumberTrajectoryPoints();ipoint++){
-
-                            double X0 = larutil::GeometryHelper::GetME()->Point_3Dto2D(_best_Track[itarget].LocationAtPoint(ipoint-1),iPlane).w / 0.3;
-                            double Y0 = X2Tick(_best_Track[itarget].LocationAtPoint(ipoint-1).X(),iPlane);
 
                             double X1 = larutil::GeometryHelper::GetME()->Point_3Dto2D(_best_Track[itarget].LocationAtPoint(ipoint),iPlane).w / 0.3;
                             double Y1 = X2Tick(_best_Track[itarget].LocationAtPoint(ipoint).X(),iPlane);
@@ -135,7 +158,7 @@ bool ChimeraFinding::analyze(larlite::storage_manager &storage){
                     else{
                         thistrackhits.push_back( (*ev_hit)[hit_index] );
                     }
-                }
+                }*/
                 //std::cout << thistrackhits.size() << std::endl;
                 _best_HitCluster[itarget] = thistrackhits;
             }
@@ -146,35 +169,6 @@ bool ChimeraFinding::analyze(larlite::storage_manager &storage){
 //______________________________________________________________________________________________________
 bool ChimeraFinding::finalize(){
     return true;
-}
-//______________________________________________________________________________________________________
-void ChimeraFinding::ReadTargetFile(){
-    FullTargetParameters.clear();
-    std::ifstream file(_TargetFile);
-    if(!file){std::cout << "ERROR, could not open file" << std::endl;return;}
-    int Run, SubRun, Event;
-    double X0,Y0,Z0,L_p,theta_p,phi_p,L_u,theta_u,phi_u;
-    char coma;
-    std::vector<double> eventTarget(9);
-    bool goOn = true;
-    while(goOn){
-        file >> Run >> coma >> SubRun >> coma >> Event >> coma >> X0 >> coma >> Y0 >> coma >> Z0 >> coma >> L_p >> coma >> theta_p >> coma >> phi_p >> coma >> L_u >> coma >> theta_u >> coma >> phi_u;
-        eventTarget[0] = X0;
-        eventTarget[1] = Y0;
-        eventTarget[2] = Z0;
-        eventTarget[3] = L_p;
-        eventTarget[4] = theta_p;
-        eventTarget[5] = phi_p;
-        eventTarget[6] = L_u;
-        eventTarget[7] = theta_u;
-        eventTarget[8] = phi_u;
-        FullTargetParameters.push_back(eventTarget);
-        /*std::cout << Run << "\t" << SubRun << "\t" << Event << "\t";
-        for(auto ipar:eventTarget){std::cout << ipar << "\t";}
-        std::cout << std::endl;*/
-        if(file.eof()){goOn=false;break;}
-    }
-    file.close();
 }
 //______________________________________________________________________________________________________
 void ChimeraFinding::ReadTrackFile(){
