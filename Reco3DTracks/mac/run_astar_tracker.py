@@ -17,8 +17,8 @@ for x in xrange(len(sys.argv)-1):
     my_proc.add_input_file(sys.argv[x+1])
 
 # Specify IO mode
-#my_proc.set_io_mode(fmwk.storage_manager.kREAD)
-my_proc.set_io_mode(fmwk.storage_manager.kBOTH)
+my_proc.set_io_mode(fmwk.storage_manager.kREAD)
+#my_proc.set_io_mode(fmwk.storage_manager.kBOTH)
 
 
 # Specify output root file name
@@ -29,13 +29,16 @@ my_proc.set_output_file("output_larlite.root");
 # Replace with your analysis unit if you wish.
 my_proc.add_process(fmwk.AStarTracker())
 #my_proc.set_data_to_write(larlite.event_track,"ev_track")
+#my_proc.get_process(0).set_producer("dl","chstatus_")
+my_proc.get_process(0).set_producer("pandoraNu","chstatus")
+my_proc.get_process(0).SetVerbose(0);
 
 print
 print  "Finished configuring ana_processor. Start event loop!"
 print
 
 # Let's run it.
-my_proc.run();
+my_proc.run(0,2000);
 
 # done!
 print

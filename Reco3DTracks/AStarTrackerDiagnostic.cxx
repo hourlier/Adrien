@@ -104,8 +104,8 @@ namespace larlite {
             //
             // Compare corrected track to MC and hits
             CompareReco2Hits();
-            CompareRecoCorr2MC();
-            CompareLengths();
+            //CompareRecoCorr2MC();
+            //CompareLengths();
             DrawdQdX();
         }
 
