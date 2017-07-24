@@ -6,6 +6,7 @@
 #include "DataFormat/hit.h"
 #include "DataFormat/Image2D.h"
 #include "DataFormat/mctrack.h"
+#include "DataFormat/wire.h"
 #include "LArUtil/Geometry.h"
 #include "LArUtil/GeometryHelper.h"
 #include "LArUtil/TimeService.h"
@@ -24,26 +25,71 @@
 #include "/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/myLArLiteCV/app/SCE/SpaceChargeMicroBooNE.h"
 
 namespace larlite {
+    
+    double AStarTracker::X2Tick(double x, size_t plane) const {
 
+        auto ts = larutil::TimeService::GetME();
+        auto larp = larutil::LArProperties::GetME();
+
+        // (X [cm] / Drift Velocity [cm/us] - TPC waveform tick 0 offset) ... [us]
+        double tick = (x / larp->DriftVelocity() - ts->TriggerOffsetTPC() - _speedOffset);
+        // 1st plane's tick
+        /*if(plane==0) return tick * 2;// 2 ticks/us
+         // 2nd plane needs more drift time for plane0=>plane1 gap (0.3cm) difference
+         tick -= 0.3 / larp->DriftVelocity(larp->Efield(1));
+         // 2nd plane's tick
+         if(plane==1) return tick * 2;
+         // 3rd plane needs more drift time for plane1=>plane2 gap (0.3cm) difference
+         tick -= 0.3 / larp->DriftVelocity(larp->Efield(2));*/
+        return tick * 2;
+    }
+    //______________________________________________________
+    double AStarTracker::Tick2X(double tick, size_t plane) const{
+        //std::cout << "tick : " << tick;
+        auto ts = larutil::TimeService::GetME();
+        auto larp = larutil::LArProperties::GetME();
+        // remove tick offset due to plane
+        /*if(plane >= 1) {tick += 0.3/larp->DriftVelocity(larp->Efield(1));}
+         if(plane >= 2) {
+         tick += 0.3/larp->DriftVelocity(larp->Efield(2));
+         }*/
+        tick/=2.;
+        double x = (tick+ts->TriggerOffsetTPC()+_speedOffset)*larp->DriftVelocity();
+        //std::cout << "  =>  x : " << x << "  => new tick : " << X2Tick(x,plane) << std::endl;
+
+        return x;
+    }
+    //______________________________________________________
+    void AStarTracker::tellMe(std::string s, int verboseMin = 0){
+        if(_verbose >= verboseMin) std::cout << s << std::endl;
+    }
+    //______________________________________________________
     bool AStarTracker::initialize() {
         ReadProtonTrackFile();
         _eventTreated = 0;
         _eventSuccess = 0;
+        time_bounds.reserve(3);
+        wire_bounds.reserve(3);
+        hit_image_v.reserve(3);
         hDistance2Hit = new TH1D("hDistance2Hit","hDistance2Hit",100,0,50);
-        hdQdx = new TH1D("hdQdx","hdQdx",100,0,100);
-        hdQdxEntries = new TH1D("hdQdxEntries","hdQdxEntries",100,0,100);
+        if(_DrawOutputs){
+            hdQdx = new TH1D("hdQdx","hdQdx",100,0,100);
+            hdQdxEntries = new TH1D("hdQdxEntries","hdQdxEntries",hdQdx->GetNbinsX(),hdQdx->GetXaxis()->GetXmin(),hdQdx->GetXaxis()->GetXmax());
+            hdQdX2D = new TH2D("hdQdX2D","hdQdX2D",200,0,100,300,0,300);
+        }
         return true;
     }
-
+    //______________________________________________________
     bool AStarTracker::analyze(storage_manager* storage) {
         gStyle->SetOptStat(0);
         //
         // Retrieve data products
         //
-        auto ev_track    = storage->get_data<event_track>(_track_producer);       // tracks
-        auto ev_chstatus = storage->get_data<event_chstatus>(_chstatus_producer); // chstatus
-        auto ev_mct      = storage->get_data<event_mctrack>(_mctrack_producer);   // mctracks
-        auto ev_gaushit  = storage->get_data<event_hit>("gaushit");               // gaushits
+        auto ev_track    = storage->get_data<event_track>(    _track_producer);    // tracks
+        auto ev_chstatus = storage->get_data<event_chstatus>( _chstatus_producer); // chstatus
+        auto ev_mct      = storage->get_data<event_mctrack>(  _mctrack_producer);  // mctracks
+        auto ev_gaushit  = storage->get_data<event_hit>(      _hit_producer);      // gaushits
+        auto ev_wire     = storage->get_data<event_wire>(     _wire_producer);     // caldata
 
         // Check validity
         if(!ev_track)    throw DataFormatException("Could not locate event_track data product!");
@@ -57,16 +103,6 @@ namespace larlite {
         _event = storage->event_id();
 
         tellMe(Form("%d\t%d\t%d",_run,_subrun,_event),1);
-        //if(!(_run == 6146 && _subrun ==	2 && _event ==	114)) return true;
-
-        // if running on the proton files from Erez____________________________________________________________//
-        bool okevent = false;//________________________________________________________________________________//
-        for(auto trackinfo:_SelectableTracks){//_______________________________________________________________//
-            if(_run == trackinfo[0] && _subrun == trackinfo[1] && _event == trackinfo[2]){okevent = true; break;}//___//
-        }//____________________________________________________________________________________________________//
-        if(!okevent) return true;//____________________________________________________________________________//
-        //
-        //
 
         // Get associated hits + association info
         larlite::event_hit* ev_hit=nullptr;
@@ -84,9 +120,8 @@ namespace larlite {
 
         for(size_t track_index=0; track_index < ev_track->size(); ++track_index) {
             _track = track_index;
-            if( !(_SelectableTracks.size()!=0 && IsGoodTrack()) ) continue;
+            if( _track_producer!= "dl" && !(_SelectableTracks.size()!=0 && IsGoodTrack()) ) continue;
             tellMe(Form("%d\t%d\t%d\t%d",_run,_subrun,_event,_track),0);
-            //if((_run == 5161 && _subrun ==	18 && _event ==	937  && _track == 1)) continue;
 
             if (track_to_hit[track_index].size() == 0){
                 tellMe("no hits associated to this track, stop here for now",0);
@@ -109,14 +144,14 @@ namespace larlite {
             if(start_pt.Y() < -115 || end_pt.Y() < -115){endpointOutOfRange = true;}
             if(start_pt.Y() >  115 || end_pt.Y() >  115){endpointOutOfRange = true;}
 
-            if(start_pt.Z() < 0    || end_pt.Z() < 0   ){endpointOutOfRange = true;}
+            if(start_pt.Z() < 1    || end_pt.Z() < 1   ){endpointOutOfRange = true;}
             if(start_pt.Z() > 1036 || end_pt.Z() > 1036){endpointOutOfRange = true;}
 
             if(endpointOutOfRange){tellMe("Point out of range",0); continue;}
 
             //
             // 0-bis) find corresponding MC track
-            if(ev_mct){
+            if(ev_mct && _track_producer == "dl"){
                 larlite::mctrack trueTrack;
                 for(auto const& mct : *ev_mct) {
                     double DRstart = sqrt(pow(start_pt.X()-mct.Start().X(),2)+pow(start_pt.Y()-mct.Start().Y(),2)+pow(start_pt.Z()-mct.Start().Z(),2));
@@ -124,7 +159,7 @@ namespace larlite {
                     if(DRstart > 10 || DRend > 10)continue;
                     trueTrack = mct;
                 }
-                //if(trueTrack.size() == 0){std::cout << "Could not find MC track corresponding to provided start and end points => stop" << std::endl;continue;}
+                if(trueTrack.size() == 0){tellMe("Could not find MC track corresponding to provided start and end points => stop",0);continue;}
             }
             tellMe("11111",1);
 
@@ -169,12 +204,37 @@ namespace larlite {
             // 2) construct chstatus image2d ... do this in the same loop
             //
 
+            //
+            // Setup time and wire range
+            //
+            SetTimeAndWireBounds();
+
+            //
+            // create Image 2D
+            //
             bool imageOK = false;
-            std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > imagesPair = CreateImages(trackHit_v,chstatus_vector,imageOK);
+            //std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > imagesPair = CreateImages(trackHit_v,chstatus_vector,imageOK);
+            //std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > imagesPair = CreateImages(*ev_wire,chstatus_vector,imageOK);
+            //std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > imagesPair = CreateImages(trackHit_v, wire_v,chstatus_vector,imageOK);
+            CreateImages(*ev_wire,imageOK);
             if(imageOK  == false){tellMe("imageOK is false",1); continue;}
 
-            std::vector<larcv::Image2D> hit_image_v      = imagesPair.first;
-            std::vector<larcv::Image2D> chstatus_image_v = imagesPair.second;
+            tellMe("hit_image_v created", 1);
+
+            for(size_t iPlane = 0;iPlane<3;iPlane++){
+                tellMe(Form("plane %zu %zu rows and %zu cols after CreateImages", iPlane,hit_image_v[iPlane].meta().rows(),hit_image_v[iPlane].meta().cols()),1);
+            }
+
+
+            //hit_image_v      = imagesPair.first;
+            //chstatus_image_v = imagesPair.second;
+
+            tellMe("creating chstatus image v",1);
+            chstatus_image_v.clear();
+            for(size_t iPlane = 0;iPlane<3;iPlane++){
+                chstatus_image_v.push_back(hit_image_v[iPlane]);
+                chstatus_image_v[iPlane].paint(0);
+            }
 
             tellMe("44444",1);
 
@@ -183,53 +243,21 @@ namespace larlite {
             //
             //std::cout << "about to call Reconstruct()" << std::endl;
             _eventTreated++ ;
-            (*ev_track)[track_index] = Reconstruct(hit_image_v, chstatus_image_v);
+            //(*ev_track)[track_index] = Reconstruct(imagesPair.first, imagesPair.second);
+            //(*ev_track)[track_index] = Reconstruct(hit_image_v, chstatus_image_v);
+            (*ev_track)[track_index] = Reconstruct();
             //std::cout << "Reconstruct called and executed" << std::endl;
             (*ev_track)[track_index].set_track_id(thisTrackID);
 
             tellMe("calling CompareReco2hits",1);
+            //CompareReco2hits((*ev_track)[track_index],imagesPair.first);
             CompareReco2hits((*ev_track)[track_index],hit_image_v);
 
             std::cout << std::endl << std::endl;
         }
         return true;
     }
-
-    double AStarTracker::X2Tick(double x, size_t plane) const {
-
-        auto ts = larutil::TimeService::GetME();
-        auto larp = larutil::LArProperties::GetME();
-
-        // (X [cm] / Drift Velocity [cm/us] - TPC waveform tick 0 offset) ... [us]
-        double tick = (x / larp->DriftVelocity() - ts->TriggerOffsetTPC() - _speedOffset);
-        // 1st plane's tick
-        /*if(plane==0) return tick * 2;// 2 ticks/us
-        // 2nd plane needs more drift time for plane0=>plane1 gap (0.3cm) difference
-        tick -= 0.3 / larp->DriftVelocity(larp->Efield(1));
-        // 2nd plane's tick
-        if(plane==1) return tick * 2;
-        // 3rd plane needs more drift time for plane1=>plane2 gap (0.3cm) difference
-        tick -= 0.3 / larp->DriftVelocity(larp->Efield(2));*/
-        return tick * 2;
-    }
-
-    double AStarTracker::Tick2X(double tick, size_t plane) const{
-        //std::cout << "tick : " << tick;
-        auto ts = larutil::TimeService::GetME();
-        auto larp = larutil::LArProperties::GetME();
-        // remove tick offset due to plane
-        /*if(plane >= 1) {tick += 0.3/larp->DriftVelocity(larp->Efield(1));}
-        if(plane >= 2) {
-            tick += 0.3/larp->DriftVelocity(larp->Efield(2));
-        }*/
-        tick/=2.;
-        double x = (tick+ts->TriggerOffsetTPC()+_speedOffset)*larp->DriftVelocity();
-        //std::cout << "  =>  x : " << x << "  => new tick : " << X2Tick(x,plane) << std::endl;
-
-        return x;
-    }
-
-
+    //______________________________________________________
     larlite::track AStarTracker::Reconstruct(const std::vector<larcv::Image2D>& hit_image_v, const std::vector<larcv::Image2D>& chstatus_image_v){
         tellMe("creating tag image",1);
         std::vector<larcv::Image2D> tag_image_v(3);
@@ -291,13 +319,13 @@ namespace larlite {
         //-----------------------------------------------
         larlitecv::AStar3DAlgoConfig config;
         config.accept_badch_nodes = true;
-        config.astar_threshold.resize(3,0);
+        config.astar_threshold.resize(3,1);    // min value for a pixel to be considered non 0
         config.astar_neighborhood.resize(3,5); //can jump over n empty pixels
-        config.astar_start_padding = 10;// allowed region around the start point
-        config.astar_end_padding = 10;  // allowed region around the end point
-        config.lattice_padding = 5; // margin around the edges
-        config.min_nplanes_w_hitpixel = 2;
-        config.restrict_path = false; // do I want to restrict to a cylinder around the strainght line of radius defined bellow
+        config.astar_start_padding = 20;       // allowed region around the start point
+        config.astar_end_padding = 20;         // allowed region around the end point
+        config.lattice_padding = 5;            // margin around the edges
+        config.min_nplanes_w_hitpixel = 1;     // minimum allowed coincidences between non 0 pixels across planes
+        config.restrict_path = false; // do I want to restrict to a cylinder around the strainght line of radius defined bellow ?
         config.path_restriction_radius = 30.0;
 
         //_______________________________________________
@@ -309,7 +337,7 @@ namespace larlite {
 
         tellMe("starting A*",1);
         RecoedPath = algo.findpath( hit_image_v, chstatus_image_v, tag_image_v, start_row, end_row, start_cols, end_cols, goal_reached );
-
+        tellMe("A* done",1);
         if(goal_reached == 1){
             _eventSuccess++;
         }
@@ -326,28 +354,145 @@ namespace larlite {
         tellMe("calling ComputedQdX()",1);
         newTrack = ComputedQdX(newTrack,hit_image_v,chstatus_image_v);
 
+        //-----------------------------------------------
+        // Draw dQdX profile
+        //-----------------------------------------------
+        if(_DrawOutputs){
+            tellMe("calling DrawdQdX",1);
+            DrawdQdX(newTrack);
+        }
         return newTrack;
     }
+    //______________________________________________________
+    larlite::track AStarTracker::Reconstruct(){
+        tellMe("creating tag image",1);
+        std::vector<larcv::Image2D> tag_image_v(3);
+        for(size_t iPlane = 0;iPlane<3;iPlane++){
+            tag_image_v[iPlane] = hit_image_v[iPlane];
+            tag_image_v[iPlane].paint(0);
+        }
 
+        RecoedPath.clear();
+        int goal_reached = 0;
+
+        //_______________________________________________
+        // Get Start and end points
+        //-----------------------------------------------
+        tellMe("getting start and end points",1);
+        std::vector<int> start_cols(3);
+        std::vector<int> end_cols(3);
+        int start_row, end_row;
+
+        if(hit_image_v[1].meta().height()>0) {
+            start_row = hit_image_v[1].meta().row(X2Tick(start_pt.X(),1));
+            end_row = hit_image_v[1].meta().row(X2Tick(end_pt.X(),1));
+        }
+        else if(hit_image_v[0].meta().height()>0) {
+            start_row = hit_image_v[0].meta().row(X2Tick(start_pt.X(),0));
+            end_row = hit_image_v[0].meta().row(X2Tick(end_pt.X(),0));
+        }
+        else if(hit_image_v[2].meta().height()>0) {
+            start_row = hit_image_v[2].meta().row(X2Tick(start_pt.X(),2));
+            end_row = hit_image_v[2].meta().row(X2Tick(end_pt.X(),2));
+        }
+        else{tellMe("error: 0 rows",0); return larlite::track();}
+
+        //tellMe("ok here");
+
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+
+            if(hit_image_v[iPlane].meta().width()==0)continue;
+
+            double wireProjStartPt = larutil::GeometryHelper::GetME()->Point_3Dto2D(start_pt,iPlane).w / 0.3;
+            double wireProjEndPt   = larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3;
+
+            //if(iPlane == 1 && wireProjStartPt >= 2400){wireProjStartPt = 2399;std::cout << "had to move the start point wire projection" << std::endl;}
+            //if(iPlane == 1 && wireProjEndPt   >= 2400){wireProjEndPt   = 2399;std::cout << "had to move the end point wire projection"   << std::endl;}
+
+            //std::cout << iPlane << "\t" << wireProjStartPt << "\t" << wireProjEndPt << std::endl;
+
+            if(wireProjStartPt < 0) wireProjStartPt = 0;
+            if(wireProjEndPt   < 0) wireProjEndPt   = 0;
+
+            start_cols[iPlane] = hit_image_v[iPlane].meta().col(wireProjStartPt);
+            end_cols[iPlane]   = hit_image_v[iPlane].meta().col(wireProjEndPt);
+        }
+
+        //std::cout << "start and end rows OK" << std::endl;
+
+        //_______________________________________________
+        // Configure A* algo
+        //-----------------------------------------------
+        larlitecv::AStar3DAlgoConfig config;
+        config.accept_badch_nodes = true;
+        config.astar_threshold.resize(3,1);    // min value for a pixel to be considered non 0
+        config.astar_neighborhood.resize(3,5); //can jump over n empty pixels
+        config.astar_start_padding = 20;       // allowed region around the start point
+        config.astar_end_padding = 20;         // allowed region around the end point
+        config.lattice_padding = 5;            // margin around the edges
+        config.min_nplanes_w_hitpixel = 1;     // minimum allowed coincidences between non 0 pixels across planes
+        config.restrict_path = false; // do I want to restrict to a cylinder around the strainght line of radius defined bellow ?
+        config.path_restriction_radius = 30.0;
+
+        //_______________________________________________
+        // Define A* algo
+        //-----------------------------------------------
+        larlitecv::AStar3DAlgoProton algo( config );
+        algo.setVerbose(0);
+        algo.setPixelValueEsitmation(true);
+
+        tellMe("starting A*",1);
+        for(size_t iPlane = 0;iPlane<3;iPlane++){
+            tellMe(Form("plane %zu %zu rows and %zu cols before findpath", iPlane,hit_image_v[iPlane].meta().rows(),hit_image_v[iPlane].meta().cols()),1);
+        }
+        RecoedPath = algo.findpath( hit_image_v, chstatus_image_v, tag_image_v, start_row, end_row, start_cols, end_cols, goal_reached );
+        tellMe("A* done",1);
+        if(goal_reached == 1){
+            _eventSuccess++;
+        }
+
+        //_______________________________________________
+        // Make track out of 3D nodes
+        //-----------------------------------------------
+        tellMe("making newTrack",1);
+        larlite::track newTrack = MakeTrack();
+
+        //_______________________________________________
+        // Compute dQdx for newTrack
+        //-----------------------------------------------
+        tellMe("calling ComputedQdX()",1);
+        newTrack = ComputedQdX(newTrack,hit_image_v,chstatus_image_v);
+
+        //-----------------------------------------------
+        // Draw dQdX profile
+        //-----------------------------------------------
+        if(_DrawOutputs){
+            tellMe("calling DrawdQdX",1);
+            DrawdQdX(newTrack);
+        }
+        return newTrack;
+    }
+    //______________________________________________________
     void AStarTracker::DrawdQdX(larlite::track thisTrack){
+        bool highdQdX = false;
         for(size_t iNode = 0;iNode<thisTrack.NumberTrajectoryPoints()-1;iNode++){
-            double dqdx =   thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ)
-                            +thisTrack.DQdxAtPoint(iNode,larlite::geo::kU)
-                            +thisTrack.DQdxAtPoint(iNode,larlite::geo::kV);
+            double dqdx =   0;
+            int Nplanes = 0;
+            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) != 0){dqdx += thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ); Nplanes++;}
+            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) != 0){dqdx += thisTrack.DQdxAtPoint(iNode,larlite::geo::kU); Nplanes++;}
+            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kV) != 0){dqdx += thisTrack.DQdxAtPoint(iNode,larlite::geo::kV); Nplanes++;}
+            if(Nplanes == 0) continue;
+            dqdx *= 3./Nplanes;
 
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)!=0) dqdx*=3./2.;
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)!=0) dqdx*=3./2.;
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)==0) dqdx*=3./2.;
-
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)!=0) dqdx*=3.;
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)==0) dqdx*=3.;
-            if(thisTrack.DQdxAtPoint(iNode,larlite::geo::kZ) == 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kU) != 0 && thisTrack.DQdxAtPoint(iNode,larlite::geo::kV)==0) dqdx*=3.;
+            if(dqdx > 300) highdQdX = true;
 
             hdQdx->Fill(thisTrack.Length(iNode),dqdx);
             hdQdxEntries->Fill(thisTrack.Length(iNode));
+            hdQdX2D->Fill(thisTrack.Length(iNode),dqdx);
         }
+        if(highdQdX){tellMe("\t \t high dQdX",1);}
     }
-
+    //______________________________________________________
     void AStarTracker::CompareReco2MC3D(const larlite::track recoTrackRaw, const larlite::mctrack trueTrack){
         //larlite::track recoTrack = CorrectSCE(recoTrackRaw);
         larlite::track recoTrack = recoTrackRaw;
@@ -404,38 +549,36 @@ namespace larlite {
         }
 
     }
-
+    //______________________________________________________
     void AStarTracker::CompareReco2hits(const larlite::track recoTrack, const std::vector<larcv::Image2D>& hit_image_v){
 
         for(size_t iNode = 0; iNode<recoTrack.NumberTrajectoryPoints();iNode++){
-            //std::cout << iNode << std::endl;
-            //TVector3 this_point = recoTrack.LocationAtPoint(iNode);
+
             double dist=1e9;
             for(int iPlane=0;iPlane<3;iPlane++){
-                //std::cout << iPlane << std::endl;
+
                 double thiscol = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(recoTrack.LocationAtPoint(iNode),iPlane).w/0.3);
                 double thisrow = hit_image_v[iPlane].meta().row(X2Tick(recoTrack.LocationAtPoint(iNode).X(),iPlane));
-                //std::cout << thisrow << "\t" << thiscol << std::endl;
-                //std::cout << "reading images for this point" << std::endl;
+
                 for(size_t icol = 0;icol<hit_image_v[iPlane].meta().cols();icol++){
                     for(int irow=0;irow<hit_image_v[iPlane].meta().rows();irow++){
-                        //std::cout << icol << "/" << hit_image_v[iPlane].meta().cols() << "\t" << irow << "/" << hit_image_v[iPlane].meta().rows() << std::endl;
+
                         if(hit_image_v[iPlane].pixel(irow,icol)<=1)continue;
-                        //std::cout << "about to evaluate thisdist" << std::endl;
+
                         double thisdist = sqrt(pow(_compressionFactor_t*(thisrow-irow),2)+pow(_compressionFactor_w*(thiscol-icol),2));
-                        //std::cout << "thisdist = "<< thisdist << std::endl;
+
                         if(dist > thisdist)dist = thisdist;
                     }
                 }
             }
-            //std::cout << "filling hDistance2Hit" << std::endl;
             hDistance2Hit->Fill(dist);
         }
     }
-
+    //______________________________________________________
     bool AStarTracker::finalize() {
         tellMe("Finalizing",0);
         tellMe(Form("%d / %d = %.2f",_eventSuccess,_eventTreated,_eventSuccess*100./_eventTreated),0);
+
         TCanvas *cDist = new TCanvas();
         hDistance2Hit->Draw();
         cDist->SetLogy();
@@ -443,9 +586,32 @@ namespace larlite {
         tellMe(Form("hDistance2Hit mean: %.2f , RMS : %.2f",hDistance2Hit->GetMean(),hDistance2Hit->GetRMS()),0);
         tellMe(Form("entries : %.1f",hDistance2Hit->GetEntries()),0);
         cDist->SaveAs("DistanceReco2Hit.pdf");
+
+        if(_DrawOutputs){
+
+            if(hdQdx->GetEntries() > 1){
+                TCanvas *cdQdX = new TCanvas("cdQdX","cdQdX",800,600);
+                for(int i = 0;i<hdQdx->GetNbinsX(); i++){
+                    if(hdQdxEntries->GetBinContent(i+1) == 0) continue;
+                    if(hdQdx->GetBinContent(i+1) == 0) continue;
+                    double a = hdQdx->GetBinContent(i+1);
+                    hdQdx->SetBinContent(i+1,a*1./hdQdxEntries->GetBinContent(i+1));
+                    hdQdx->SetBinError(i+1,0.001*hdQdx->GetBinContent(i+1));
+
+                }
+                hdQdx->Draw();
+                cdQdX->SaveAs("cdQdX.pdf");
+            }
+            if(hdQdX2D->GetEntries() > 1){
+                TCanvas *cdQdX2D = new TCanvas("cdQdX2D","cdQdX2D",800,600);
+                hdQdX2D->Draw("colz");
+                cdQdX2D->SaveAs("cdQdX2D.pdf");
+                cdQdX2D->SaveAs("cdQdX2D.root");
+            }
+        }
         return true;
     }
-
+    //______________________________________________________
     larlite::track AStarTracker::MakeTrack(){
         larlite::track newTrack;
         double nodeX,nodeY,nodeZ,nodeDirX,nodeDirY,nodeDirZ,norm;
@@ -479,7 +645,7 @@ namespace larlite {
         }
         return newTrack;
     }
-
+    //______________________________________________________
     larlite::track AStarTracker::ComputedQdX(larlite::track newTrack, const std::vector<larcv::Image2D>& hit_image_v, const std::vector<larcv::Image2D>& chstatus_image_v){
         double X0,Y0,X1,Y1,X2,Y2;
         std::vector<double> planedQdx;
@@ -493,39 +659,45 @@ namespace larlite {
         TGraph *gTrack[3];
         TGraph *gStartNend[3];
 
-        for(size_t iPlane=0;iPlane<3;iPlane++){
-            //std::cout << "\t" << iPlane;
-            gTrack[iPlane] = new TGraph();
-            hImage[iPlane] = new TH2D(Form("hImage_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hImage_%d_%d_%d_%d_%zu;wire;time",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
-            hStatus[iPlane] = new TH2D(Form("hStatus_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hStatus_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
-            hIntegral[iPlane] = new TH2D(Form("hIntegral_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hIntegral_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
-            //std::cout << "\t histos for plane defined ";
-            for(int icol=0;icol<hit_image_v[iPlane].meta().cols();icol++){
-                for(int irow=0;irow<hit_image_v[iPlane].meta().rows();irow++){
-                    hImage[iPlane]->SetBinContent(icol+1,irow+1,hit_image_v[iPlane].pixel(irow,icol));
-                    hStatus[iPlane]->SetBinContent(icol+1,irow+1,chstatus_image_v[iPlane].pixel(irow,icol));
+        if(_DrawOutputs){
+            for(size_t iPlane=0;iPlane<3;iPlane++){
+                tellMe(Form("computedQdx \t plane %zu", iPlane),1);
+                gTrack[iPlane] = new TGraph();
+                hImage[iPlane] = new TH2D(Form("hImage_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hImage_%d_%d_%d_%d_%zu;wire;time",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
+                hStatus[iPlane] = new TH2D(Form("hStatus_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hStatus_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
+                hIntegral[iPlane] = new TH2D(Form("hIntegral_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),Form("hIntegral_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),hit_image_v[iPlane].meta().cols(),0,hit_image_v[iPlane].meta().cols(),hit_image_v[iPlane].meta().rows(),0,hit_image_v[iPlane].meta().rows());
+                //std::cout << "\t histos for plane defined ";
+                for(int icol=0;icol<hit_image_v[iPlane].meta().cols();icol++){
+                    for(int irow=0;irow<hit_image_v[iPlane].meta().rows();irow++){
+                        hImage[iPlane]->SetBinContent(icol+1,irow+1,hit_image_v[iPlane].pixel(irow,icol));
+                        hStatus[iPlane]->SetBinContent(icol+1,irow+1,chstatus_image_v[iPlane].pixel(irow,icol));
+                    }
+                }
+
+                gStartNend[iPlane] = new TGraph();
+                gStartNend[iPlane]->SetPoint(0,hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(start_pt,iPlane).w/0.3),hit_image_v[iPlane].meta().row(X2Tick(start_pt.X(),iPlane)));
+                //std::cout << " /  gStartNend filled first point ";
+
+                double this_wire = larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w/0.3;
+                //std::cout << " / wire : " << this_wire << " ";
+                double this_end_col = hit_image_v[iPlane].meta().col(this_wire);
+                //std::cout << " /  col : " << this_end_col << " ";
+                double this_end_row = hit_image_v[iPlane].meta().row(X2Tick(end_pt.X(),iPlane));
+                //std::cout << " /  row : " << this_end_row << " ";
+                gStartNend[iPlane]->SetPoint(1,this_end_col,this_end_row);
+                //std::cout << " /  gStartNend filled last point " << std::endl;
+
+                for(size_t iNode=0;iNode<newTrack.NumberTrajectoryPoints()-1;iNode++){
+                    X1 = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(newTrack.LocationAtPoint(iNode  ),iPlane).w/0.3);
+                    Y1 = hit_image_v[iPlane].meta().row(X2Tick(newTrack.LocationAtPoint(iNode  ).X(),iPlane));
+
+                    X2 = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(newTrack.LocationAtPoint(iNode+1),iPlane).w/0.3);
+                    Y2 = hit_image_v[iPlane].meta().row(X2Tick(newTrack.LocationAtPoint(iNode+1).X(),iPlane));
+
+                    gTrack[iPlane]->SetPoint(iNode,X1+0.5,Y1+0.5);
+                    gTrack[iPlane]->SetPoint(iNode+1,X2+0.5,Y2+0.5);
                 }
             }
-            //std::cout << " /  hImage filled";
-            //std::cout << " / X0 : " << start_pt.X() << " ";
-            //std::cout << " / Y0 : " << start_pt.Y() << " ";
-            //std::cout << " / Z0 : " << start_pt.Z() << " ";
-            //std::cout << " / Xf : " << end_pt.X() << " ";
-            //std::cout << " / Yf : " << end_pt.Y() << " ";
-            //std::cout << " / Zf : " << end_pt.Z() << " ";
-
-            gStartNend[iPlane] = new TGraph();
-            gStartNend[iPlane]->SetPoint(0,hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(start_pt,iPlane).w/0.3),hit_image_v[iPlane].meta().row(X2Tick(start_pt.X(),iPlane)));
-            //std::cout << " /  gStartNend filled first point ";
-
-            double this_wire = larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w/0.3;
-            //std::cout << " / wire : " << this_wire << " ";
-            double this_end_col = hit_image_v[iPlane].meta().col(this_wire);
-            //std::cout << " /  col : " << this_end_col << " ";
-            double this_end_row = hit_image_v[iPlane].meta().row(X2Tick(end_pt.X(),iPlane));
-            //std::cout << " /  row : " << this_end_row << " ";
-            gStartNend[iPlane]->SetPoint(1,this_end_col,this_end_row);
-            //std::cout << " /  gStartNend filled last point " << std::endl;
         }
 
         tellMe("computing dqdx",1);
@@ -534,17 +706,15 @@ namespace larlite {
 
             for(size_t iNode=0;iNode<newTrack.NumberTrajectoryPoints()-1;iNode++){
                 localdQdx=0;
+                int NpxLocdQdX = 0;
                 X1 = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(newTrack.LocationAtPoint(iNode  ),iPlane).w/0.3);
                 Y1 = hit_image_v[iPlane].meta().row(X2Tick(newTrack.LocationAtPoint(iNode  ).X(),iPlane));
 
                 X2 = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(newTrack.LocationAtPoint(iNode+1),iPlane).w/0.3);
                 Y2 = hit_image_v[iPlane].meta().row(X2Tick(newTrack.LocationAtPoint(iNode+1).X(),iPlane));
 
-                gTrack[iPlane]->SetPoint(iNode,X1,Y1);
-                gTrack[iPlane]->SetPoint(iNode+1,X2,Y2);
-
-                if(X1 == X2){X1 -= 0.001;}
-                if(Y1 == Y2){Y1 -= 0.001;}
+                if(X1 == X2){X1 -= 0.0001;}
+                if(Y1 == Y2){Y1 -= 0.0001;}
 
                 //std::cout << "\t \t" << X1 << "," << Y1 << "   " << X2 << "," << Y2 << std::endl;
 
@@ -558,29 +728,48 @@ namespace larlite {
                         //----------------------------
                         double theta0; // angle with which the segment [iNode, iNode+1] is ssen by the current point
                         double theta1; // angle with which the segment [jNode, jNode+1] is seen by the current point
-                        X0 = icol+0.5;
-                        Y0 = irow+0.5;
-                        alpha = ( (X2-X1)*(X0-X1)+(Y2-Y1)*(Y0-Y1) )/( pow(X2-X1,2)+pow(Y2-Y1,2) );
-                        if(alpha < -0.1 || alpha > 1.1) continue;
+                        X0 = icol;//+0.5;
+                        Y0 = irow;//+0.5;
+                        if(X0 == X1 || X0 == X2){X0 += 0.0001;}
+                        if(Y0 == Y1 || Y0 == Y2){Y0 += 0.0001;}
+                        alpha = ( (X2-X1)*(X0-X1)+(Y2-Y1)*(Y0-Y1) )/( pow(X2-X1,2)+pow(Y2-Y1,2) ); // normalized scalar product of the 2 vectors
+                        //if(alpha <= -0.25 || alpha >= 1.25) continue;
                         xp = X1+alpha*(X2-X1);
                         yp = Y1+alpha*(Y2-Y1);
                         dist = sqrt(pow(xp-X0,2)+pow(yp-Y0,2));
-                        if(dist > Npx)continue;
-                        theta0 = std::acos( ((X1-X0)*(X2-X0)+(Y1-Y0)*(Y2-Y0)) / (sqrt(pow(X1-X0,2)+pow(Y1-Y0,2))*sqrt(pow(X2-X0,2)+pow(Y2-Y0,2))) );
+                        double dist2point = std::min( sqrt(pow(X0-X1,2)+pow(Y0-Y1,2)), sqrt(pow(X0-X2,2)+pow(Y0-Y2,2)) );
+
+                        if( alpha >= 0 && alpha <= 1 && dist > Npx ) continue;
+                        if( (alpha < 0 || alpha > 1) && dist2point > Npx ) continue;
+
+                        theta0 = std::abs(std::acos(((X1-X0)*(X2-X0)+(Y1-Y0)*(Y2-Y0))/(sqrt(pow(X1-X0,2)+pow(Y1-Y0,2))*sqrt(pow(X2-X0,2)+pow(Y2-Y0,2)))));
                         // check all other nodes, if I find an angle bigger with a distance lower than Npx, reject the point for the current segment
 
                         bool bestCandidate = true;
                         for(size_t jNode=0;jNode<newTrack.NumberTrajectoryPoints()-1;jNode++){
                             if(jNode==iNode)continue;
-                            double x1,y1,x2,y2;
+                            double x1,y1,x2,y2, alpha2, xp2,yp2, dist2;
                             x1 = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(newTrack.LocationAtPoint(jNode  ),iPlane).w/0.3);
                             x2 = hit_image_v[iPlane].meta().col(larutil::GeometryHelper::GetME()->Point_3Dto2D(newTrack.LocationAtPoint(jNode+1),iPlane).w/0.3);
 
                             y1 = hit_image_v[iPlane].meta().row(X2Tick(newTrack.LocationAtPoint(jNode  ).X(),iPlane));
                             y2 = hit_image_v[iPlane].meta().row(X2Tick(newTrack.LocationAtPoint(jNode+1).X(),iPlane));
 
-                            theta1 = std::acos( ((x1-X0)*(x2-X0)+(y1-Y0)*(y2-Y0)) / (sqrt(pow(x1-X0,2)+pow(y1-Y0,2))*sqrt(pow(x2-X0,2)+pow(y2-Y0,2))) );
-                            if(theta1 > theta0){bestCandidate=false;}
+                            if(x1 == x2){x1 -= 0.0001;}
+                            if(y1 == y2){y1 -= 0.0001;}
+
+                            alpha2 = ( (x2-x1)*(X0-x1)+(y2-y1)*(Y0-y1) )/( pow(x2-x1,2)+pow(y2-y1,2) );
+                            xp2 = x1+alpha2*(x2-x1);
+                            yp2 = y1+alpha2*(y2-y1);
+                            dist2 = sqrt(pow(xp2-X0,2)+pow(yp2-Y0,2));
+
+                            double dist2point2 = std::min( sqrt(pow(X0-x1,2)+pow(Y0-y1,2)), sqrt(pow(X0-x2,2)+pow(Y0-y2,2)) );
+
+                            if( alpha2 >= 0 && alpha2 <= 1 && dist2 > Npx ) continue;
+                            if( (alpha2 < 0 || alpha2 > 1) && dist2point2 > Npx ) continue;
+
+                            theta1 = std::abs(std::acos(((x1-X0)*(x2-X0)+(y1-Y0)*(y2-Y0))/(sqrt(pow(x1-X0,2)+pow(y1-Y0,2))*sqrt(pow(x2-X0,2)+pow(y2-Y0,2)))));
+                            if(theta1 >= theta0){bestCandidate=false;}
                         }
                         if(!bestCandidate)continue;
 
@@ -590,39 +779,47 @@ namespace larlite {
                         nodeDirZ =  newTrack.LocationAtPoint(iNode+1).Z()-newTrack.LocationAtPoint(iNode).Z();;//RecoedPath.at(iNode-1).tyz[2]-RecoedPath.at(iNode).tyz[2];
                         norm = sqrt(nodeDirX*nodeDirX+nodeDirY*nodeDirY+nodeDirZ*nodeDirZ);
                         localdQdx+=hit_image_v[iPlane].pixel(irow,icol)/norm;
-                        hIntegral[iPlane]->Fill(X0,Y0);
+                        if(_DrawOutputs){hIntegral[iPlane]->Fill(X0,Y0);}
+                        NpxLocdQdX++;
                     }
                 }
-                planedQdx.push_back(localdQdx);
+                if(NpxLocdQdX!=0)planedQdx.push_back(localdQdx/NpxLocdQdX);
+                else planedQdx.push_back(localdQdx);
+                //planedQdx.push_back(localdQdx);
             }
             newTrack.add_dqdx(planedQdx);
             planedQdx.clear();
         }
-        TCanvas *c = new TCanvas(Form("c_%d_%d_%d_%d",_run,_subrun,_event,_track),Form("c_%d_%d_%d_%d",_run,_subrun,_event,_track),1200,300);
-        c->Divide(3,1);
-        for(int iPlane=0;iPlane<3;iPlane++){
-            c->cd(iPlane+1);
-            hImage[iPlane]->Draw("colz");
-            //hStatus[iPlane]->Draw("same colz");
-            hIntegral[iPlane]->Draw("same");
-            hImage[iPlane]->Draw("same colz");
-            gTrack[iPlane]->SetLineColor(2);
-            gTrack[iPlane]->Draw("same LP");
-            gStartNend[iPlane]->SetMarkerStyle(20);
-            gStartNend[iPlane]->Draw("same P");
-        }
-        c->SaveAs(Form("%s.pdf",c->GetName()));
-        for(int iPlane = 0;iPlane<3;iPlane++){
-            hImage[iPlane]->Delete();
-            hStatus[iPlane]->Delete();
-            hIntegral[iPlane]->Delete();
-            gTrack[iPlane]->Delete();
-            gStartNend[iPlane]->Delete();
+
+        if(_DrawOutputs){
+            TCanvas *c = new TCanvas(Form("c_%d_%d_%d_%d",_run,_subrun,_event,_track),Form("c_%d_%d_%d_%d",_run,_subrun,_event,_track),450,150);
+            c->Divide(3,1);
+            for(int iPlane=0;iPlane<3;iPlane++){
+                c->cd(iPlane+1);
+                //hImage[iPlane]->Draw("colz");
+                //hStatus[iPlane]->Draw("same colz");
+                hIntegral[iPlane]->Draw();
+                //hIntegral[iPlane]->Draw("colz");
+                hImage[iPlane]->Draw("same colz");
+                gTrack[iPlane]->SetLineColor(2);
+                gTrack[iPlane]->Draw("same LP");
+                gStartNend[iPlane]->SetMarkerStyle(20);
+                gStartNend[iPlane]->SetMarkerSize(0.25);
+                gStartNend[iPlane]->Draw("same P");
+            }
+            c->SaveAs(Form("%s.pdf",c->GetName()));
+            for(int iPlane = 0;iPlane<3;iPlane++){
+                hImage[iPlane]->Delete();
+                hStatus[iPlane]->Delete();
+                hIntegral[iPlane]->Delete();
+                gTrack[iPlane]->Delete();
+                gStartNend[iPlane]->Delete();
+            }
         }
         //c->Delete();
         return newTrack;
     }
-
+    //______________________________________________________
     std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > AStarTracker::CreateImages(std::vector<larlite::hit> trackHit_v, std::vector< std::vector< std::pair<float,float> > > chstatus_vector, bool &imageOK){
 
         const size_t num_planes = 3;
@@ -730,7 +927,6 @@ namespace larlite {
             nHits++;
         }
         if(HitsPresent == false){std::cout << "no hits in Image2D" << std::endl; imageOK=false; return imagesPair;}
-        //else{std::cout << "found " << nHits << " hist in the image" << std::endl;}
 
         // Using the range, construct Image2D
 
@@ -818,7 +1014,7 @@ namespace larlite {
         // compress Images
         tellMe("compress Images",1);
         for(size_t iPlane = 0;iPlane<3;iPlane++){
-            tellMe(Form("%zu size : %zu \t %zu",iPlane,hit_image_v.at(iPlane).meta().rows(),hit_image_v.at(iPlane).meta().cols()),1);
+            tellMe(Form("%zu size : %zu rows \t %zu cols for a %d x %d compression",iPlane,hit_image_v.at(iPlane).meta().rows(),hit_image_v.at(iPlane).meta().cols(),_compressionFactor_t,_compressionFactor_w),1);
 
             hit_image_v.at(iPlane).compress(hit_image_v.at(iPlane).meta().rows()/_compressionFactor_t,
                                             hit_image_v.at(iPlane).meta().cols()/_compressionFactor_w);
@@ -832,6 +1028,414 @@ namespace larlite {
         imagesPair.second = chstatus_image_v;
         imageOK = true;
         return imagesPair;
+    }
+    //______________________________________________________
+    std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > AStarTracker::CreateImages(std::vector<larlite::wire> wire_v, std::vector< std::vector< std::pair<float,float> > > chstatus_vector, bool &imageOK){
+        const size_t num_planes = 3;
+        std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > imagesPair;
+        std::vector<larcv::Image2D> hit_image_v;
+        std::vector<larcv::Image2D> chstatus_image_v;
+        imagesPair.first = hit_image_v;
+        imagesPair.second = chstatus_image_v;
+
+        std::vector<std::pair<double,double> > time_bounds(num_planes); // first=min, second=max
+        std::vector<std::pair<double,double> > wire_bounds(num_planes); // first=min, second=max
+
+        // Initialize range limits
+        for(size_t plane=0; plane<num_planes; ++plane) {
+            time_bounds[plane].first  = 1.e9;
+            time_bounds[plane].second = 0.;
+            wire_bounds[plane].first  = 1.e9;
+            wire_bounds[plane].second = 0.;
+        }
+
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            // make sure starting point is projected back in the range
+            if(X2Tick(start_pt.X(),iPlane) < time_bounds[iPlane].first ) time_bounds[iPlane].first  = X2Tick(start_pt.X(),iPlane);
+            if(X2Tick(start_pt.X(),iPlane) > time_bounds[iPlane].second) time_bounds[iPlane].second = X2Tick(start_pt.X(),iPlane);
+            double wireProjStartPt = larutil::GeometryHelper::GetME()->Point_3Dto2D(start_pt,iPlane).w / 0.3;
+            if(wireProjStartPt < wire_bounds[iPlane].first ) wire_bounds[iPlane].first  = wireProjStartPt;
+            if(wireProjStartPt > wire_bounds[iPlane].second) wire_bounds[iPlane].second = wireProjStartPt;
+
+            // make sure ending point is projected back in the range
+            if(X2Tick(end_pt.X(),iPlane) < time_bounds[iPlane].first ) time_bounds[iPlane].first  = X2Tick(end_pt.X(),iPlane);
+            if(X2Tick(end_pt.X(),iPlane) > time_bounds[iPlane].second) time_bounds[iPlane].second = X2Tick(end_pt.X(),iPlane);
+            double wireProjEndPt   = larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3;
+            if((larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3) < wire_bounds[iPlane].first ) wire_bounds[iPlane].first  = wireProjEndPt;
+            if((larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3) > wire_bounds[iPlane].second) wire_bounds[iPlane].second = wireProjEndPt;
+        }
+        // equalize time ranges to intercept the same range on 3 views
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            for(size_t jPlane=0;jPlane<3;jPlane++){
+                if(time_bounds[jPlane].first  <= time_bounds[iPlane].first) {time_bounds[iPlane].first  = time_bounds[jPlane].first;}
+                if(time_bounds[jPlane].second >= time_bounds[iPlane].second){time_bounds[iPlane].second = time_bounds[jPlane].second;}
+            }
+        }
+        // Update the range with margin
+        double ImageMargin = 50.;
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            time_bounds[iPlane].first  -= std::max(ImageMargin,0.25*(time_bounds[iPlane].second-time_bounds[iPlane].first));
+            time_bounds[iPlane].second += std::max(ImageMargin,0.25*(time_bounds[iPlane].second-time_bounds[iPlane].first));
+            wire_bounds[iPlane].first  -= std::max(ImageMargin,0.25*(wire_bounds[iPlane].second-wire_bounds[iPlane].first));
+            wire_bounds[iPlane].second += std::max(ImageMargin,0.25*(wire_bounds[iPlane].second-wire_bounds[iPlane].first));
+
+            if(time_bounds[iPlane].first < 0) time_bounds[iPlane].first = 0;
+            if(wire_bounds[iPlane].first < 0) wire_bounds[iPlane].first = 0;
+
+            wire_bounds[iPlane].first  = (size_t)(wire_bounds[iPlane].first + 0.5);
+            wire_bounds[iPlane].second = (size_t)(wire_bounds[iPlane].second + 0.5);
+        }
+
+        // make sure the number of rows and cols are divisible by _compressionFactor
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            while(!( (size_t)(time_bounds[iPlane].second - time_bounds[iPlane].first)%_compressionFactor_t == 0)){
+                time_bounds[iPlane].second+=(_compressionFactor_t-((size_t)(time_bounds[iPlane].second - time_bounds[iPlane].first)%_compressionFactor_t));
+            }
+        }
+
+        for(int iPlane = 0;iPlane<3;iPlane++){
+
+            while(!( (size_t)(wire_bounds[iPlane].second - wire_bounds[iPlane].first)%_compressionFactor_w == 0)){
+                wire_bounds[iPlane].second+=(_compressionFactor_w-((size_t)(wire_bounds[iPlane].second - wire_bounds[iPlane].first)%_compressionFactor_w));
+            }
+        }
+
+        // Using the range, construct Image2D
+
+        for(size_t plane=0; plane<num_planes; ++plane) {
+            // Retrieve boundaries
+            auto const& time_bound = time_bounds[plane];
+            auto const& wire_bound = wire_bounds[plane];
+            // If no hit on this plane, make an empty image
+            if(wire_bound.second <= wire_bound.first ||
+               time_bound.second <= time_bound.first ) {
+                hit_image_v.push_back(larcv::Image2D());
+                chstatus_image_v.push_back(larcv::Image2D());
+                continue;
+            }
+            // Construct meta
+            //std::cout << "construct meta" << std::endl;
+            size_t image_cols = (size_t)(wire_bound.second - wire_bound.first/* + 1*/);
+            size_t image_rows = (size_t)(time_bound.second - time_bound.first/* + 1*/);
+            larcv::ImageMeta hit_meta((double)image_cols, (double)image_rows,
+                                      image_rows, image_cols,
+                                      (size_t) wire_bound.first,  // origin x = min x
+                                      (size_t) time_bound.second, // origin y = max time
+                                      plane);
+            auto chstatus_meta = hit_meta;
+
+
+            // Prepare hit image data + fill
+
+            std::vector<float> image_data(hit_meta.rows() * hit_meta.cols(), 0.);
+            size_t row,col;
+
+            for(auto wire : wire_v){
+                unsigned int ch = wire.Channel();
+                unsigned int detWire = larutil::Geometry::GetME()->ChannelToWire(ch);
+                unsigned int detPlane = larutil::Geometry::GetME()->ChannelToPlane(ch);
+                tellMe(Form("ch : %d, wire : %d, plane : %d", ch, detWire, detPlane),2);
+                if(detPlane != plane) continue;
+                if(detWire > wire_bound.first && detWire < wire_bound.second){
+                    for (auto & iROI : wire.SignalROI().get_ranges()) {
+                        int FirstTick = iROI.begin_index();
+                        int time_tick = FirstTick;
+                        for (float ADC : iROI) {
+                            if ( time_tick > time_bound.first && time_tick < time_bound.second ) {
+                                row = (size_t)(time_bound.second - time_tick + 0.5);
+                                col = (size_t)(detWire - wire_bound.first + 0.5);
+                                if(ADC >= _ADCthreshold){image_data[hit_meta.rows() * col + row] = ADC;}
+                            }
+                            time_tick++;
+                        } // ADC
+                    }// iROI
+                } // detWire
+            }
+            larcv::Image2D hit_image(std::move(hit_meta),std::move(image_data));
+            hit_image_v.emplace_back(std::move(hit_image));
+
+            ///////////////////////
+            std::vector<float> chstatus_data(chstatus_meta.rows() * chstatus_meta.cols(), 0.);
+            if(chstatus_vector.size()!=0){
+                for(int i=0;i<chstatus_vector[plane].size();i++) {
+                    auto const& status = chstatus_vector[plane][i].second;
+                    auto const& ch = chstatus_vector[plane][i].first;
+                    if(ch < wire_bound.first || ch >= wire_bound.second) continue;
+                    for(size_t row=0; row<chstatus_meta.rows(); ++row){
+                        chstatus_data[(ch - wire_bound.first) * chstatus_meta.rows() + row] = status;
+                    }
+                    break;
+                }
+            }
+            larcv::Image2D chstatus_image(std::move(chstatus_meta),std::move(chstatus_data));
+            chstatus_image_v.emplace_back(std::move(chstatus_image));
+        }
+
+        // compress Images
+        if(_compressionFactor_t > 1 || _compressionFactor_w > 1 ){
+            tellMe("compress Images",1);
+            for(size_t iPlane = 0;iPlane<3;iPlane++){
+                tellMe(Form("%zu size : %zu rows \t %zu cols for a %d x %d compression",iPlane,hit_image_v.at(iPlane).meta().rows(),hit_image_v.at(iPlane).meta().cols(),_compressionFactor_t,_compressionFactor_w),1);
+
+                hit_image_v.at(iPlane).compress(hit_image_v.at(iPlane).meta().rows()/_compressionFactor_t,
+                                                hit_image_v.at(iPlane).meta().cols()/_compressionFactor_w);
+
+                chstatus_image_v.at(iPlane).compress(chstatus_image_v.at(iPlane).meta().rows()/_compressionFactor_t,
+                                                     chstatus_image_v.at(iPlane).meta().cols()/_compressionFactor_w);
+            }
+            tellMe("image compressed",1);
+        }
+        imagesPair.first = hit_image_v;
+        imagesPair.second = chstatus_image_v;
+        imageOK = true;
+        return imagesPair;
+
+    }
+    //______________________________________________________
+    std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > AStarTracker::CreateImages(std::vector<larlite::hit> trackHit_v, std::vector<larlite::wire> wire_v, std::vector< std::vector< std::pair<float,float> > > chstatus_vector, bool &imageOK){
+        const size_t num_planes = 3;
+        std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > imagesPair;
+        std::vector<larcv::Image2D> hit_image_v;
+        std::vector<larcv::Image2D> chstatus_image_v;
+        imagesPair.first = hit_image_v;
+        imagesPair.second = chstatus_image_v;
+
+        std::vector<std::pair<double,double> > time_bounds(num_planes); // first=min, second=max
+        std::vector<std::pair<double,double> > wire_bounds(num_planes); // first=min, second=max
+
+        // Initialize range limits
+        for(size_t plane=0; plane<num_planes; ++plane) {
+            time_bounds[plane].first  = 1.e9;
+            time_bounds[plane].second = 0.;
+            wire_bounds[plane].first  = 1.e9;
+            wire_bounds[plane].second = 0.;
+        }
+
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            // make sure starting point is projected back in the range
+            if(X2Tick(start_pt.X(),iPlane) < time_bounds[iPlane].first ) time_bounds[iPlane].first  = X2Tick(start_pt.X(),iPlane);
+            if(X2Tick(start_pt.X(),iPlane) > time_bounds[iPlane].second) time_bounds[iPlane].second = X2Tick(start_pt.X(),iPlane);
+            double wireProjStartPt = larutil::GeometryHelper::GetME()->Point_3Dto2D(start_pt,iPlane).w / 0.3;
+            //std::cout << "before any resizing : z_0(" << iPlane << ") : " << wireProjStartPt << std::endl;
+            if(wireProjStartPt < wire_bounds[iPlane].first ) wire_bounds[iPlane].first  = wireProjStartPt;
+            if(wireProjStartPt > wire_bounds[iPlane].second) wire_bounds[iPlane].second = wireProjStartPt;
+
+            // make sure ending point is projected back in the range
+            if(X2Tick(end_pt.X(),iPlane) < time_bounds[iPlane].first ) time_bounds[iPlane].first  = X2Tick(end_pt.X(),iPlane);
+            if(X2Tick(end_pt.X(),iPlane) > time_bounds[iPlane].second) time_bounds[iPlane].second = X2Tick(end_pt.X(),iPlane);
+            double wireProjEndPt   = larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3;
+            //std::cout << "before any resizing : z_1(" << iPlane << ") : " << wireProjEndPt << std::endl;
+            if((larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3) < wire_bounds[iPlane].first ) wire_bounds[iPlane].first  = wireProjEndPt;
+            if((larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3) > wire_bounds[iPlane].second) wire_bounds[iPlane].second = wireProjEndPt;
+        }
+        // equalize time ranges to intercept the same range on 3 views
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            for(size_t jPlane=0;jPlane<3;jPlane++){
+                if(time_bounds[jPlane].first  <= time_bounds[iPlane].first) {time_bounds[iPlane].first  = time_bounds[jPlane].first;}
+                if(time_bounds[jPlane].second >= time_bounds[iPlane].second){time_bounds[iPlane].second = time_bounds[jPlane].second;}
+            }
+        }
+        // Update the range with margin
+        double ImageMargin = 50.;
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            time_bounds[iPlane].first  -= std::max(ImageMargin,0.25*(time_bounds[iPlane].second-time_bounds[iPlane].first));
+            time_bounds[iPlane].second += std::max(ImageMargin,0.25*(time_bounds[iPlane].second-time_bounds[iPlane].first));
+            wire_bounds[iPlane].first  -= std::max(ImageMargin,0.25*(wire_bounds[iPlane].second-wire_bounds[iPlane].first));
+            wire_bounds[iPlane].second += std::max(ImageMargin,0.25*(wire_bounds[iPlane].second-wire_bounds[iPlane].first));
+
+            if(time_bounds[iPlane].first < 0) time_bounds[iPlane].first = 0;
+            if(wire_bounds[iPlane].first < 0) wire_bounds[iPlane].first = 0;
+
+            wire_bounds[iPlane].first  = (size_t)(wire_bounds[iPlane].first + 0.5);
+            wire_bounds[iPlane].second = (size_t)(wire_bounds[iPlane].second + 0.5);
+        }
+
+        // make sure the number of rows and cols are divisible by _compressionFactor
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+
+            while(!( (size_t)(time_bounds[iPlane].second - time_bounds[iPlane].first)%_compressionFactor_t == 0)){
+                time_bounds[iPlane].second+=(_compressionFactor_t-((size_t)(time_bounds[iPlane].second - time_bounds[iPlane].first)%_compressionFactor_t));
+            }
+        }
+
+        for(int iPlane = 0;iPlane<3;iPlane++){
+            while(!( (size_t)(wire_bounds[iPlane].second - wire_bounds[iPlane].first)%_compressionFactor_w == 0)){
+                wire_bounds[iPlane].second+=(_compressionFactor_w-((size_t)(wire_bounds[iPlane].second - wire_bounds[iPlane].first)%_compressionFactor_w));
+            }
+        }
+
+        // Using the range, construct Image2D
+
+        for(size_t plane=0; plane<num_planes; ++plane) {
+            // Retrieve boundaries
+            auto const& time_bound = time_bounds[plane];
+            auto const& wire_bound = wire_bounds[plane];
+            // If no hit on this plane, make an empty image
+            if(wire_bound.second <= wire_bound.first ||
+               time_bound.second <= time_bound.first ) {
+                hit_image_v.push_back(larcv::Image2D());
+                chstatus_image_v.push_back(larcv::Image2D());
+                continue;
+            }
+            // Construct meta
+            //std::cout << "construct meta" << std::endl;
+            size_t image_cols = (size_t)(wire_bound.second - wire_bound.first/* + 1*/);
+            size_t image_rows = (size_t)(time_bound.second - time_bound.first/* + 1*/);
+            larcv::ImageMeta hit_meta((double)image_cols, (double)image_rows,
+                                      image_rows, image_cols,
+                                      (size_t) wire_bound.first,  // origin x = min x
+                                      (size_t) time_bound.second, // origin y = max time
+                                      plane);
+            auto chstatus_meta = hit_meta;
+
+
+            // Prepare hit image data + fill
+
+            std::vector<float> image_data(hit_meta.rows() * hit_meta.cols(), 0.);
+            size_t row,col;
+
+            for(auto wire : wire_v){
+                unsigned int ch = wire.Channel();
+                unsigned int detWire = larutil::Geometry::GetME()->ChannelToWire(ch);
+                unsigned int detPlane = larutil::Geometry::GetME()->ChannelToPlane(ch);
+                tellMe(Form("ch : %d, wire : %d, plane : %d", ch, detWire, detPlane),2);
+                if(detPlane != plane) continue;
+                if(detWire > wire_bound.first && detWire < wire_bound.second){
+                    for (auto & iROI : wire.SignalROI().get_ranges()) {
+                        int FirstTick = iROI.begin_index();
+                        int time_tick = FirstTick;
+                        for (float ADC : iROI) {
+                            if ( time_tick > time_bound.first && time_tick < time_bound.second ) {
+                                row = (size_t)(time_bound.second - time_tick + 0.5);
+                                col = (size_t)(detWire - wire_bound.first + 0.5);
+                                if(ADC >= _ADCthreshold){image_data[hit_meta.rows() * col + row] = ADC;}
+                            }
+                            time_tick++;
+                        } // ADC
+                    }// iROI
+                } // detWire
+            }
+            for(auto const& h : trackHit_v){
+                if(h.WireID().Plane != plane) continue;
+                if(h.PeakTime()    < time_bound.first || h.PeakTime()    >= time_bound.second) continue;
+                if(h.WireID().Wire < wire_bound.first || h.WireID().Wire >= wire_bound.second) continue;
+                row = (size_t)(time_bound.second - h.PeakTime() + 0.5);
+                col = (size_t)(h.WireID().Wire - wire_bound.first + 0.5);
+                image_data[hit_meta.rows() * col + row] += 10*h.Integral();
+            }
+
+            larcv::Image2D hit_image(std::move(hit_meta),std::move(image_data));
+            hit_image_v.emplace_back(std::move(hit_image));
+
+            ///////////////////////
+            std::vector<float> chstatus_data(chstatus_meta.rows() * chstatus_meta.cols(), 0.);
+            if(chstatus_vector.size()!=0){
+                for(int i=0;i<chstatus_vector[plane].size();i++) {
+                    auto const& status = chstatus_vector[plane][i].second;
+                    auto const& ch = chstatus_vector[plane][i].first;
+                    if(ch < wire_bound.first || ch >= wire_bound.second) continue;
+                    for(size_t row=0; row<chstatus_meta.rows(); ++row){
+                        chstatus_data[(ch - wire_bound.first) * chstatus_meta.rows() + row] = status;
+                    }
+                    break;
+                }
+            }
+            larcv::Image2D chstatus_image(std::move(chstatus_meta),std::move(chstatus_data));
+            chstatus_image_v.emplace_back(std::move(chstatus_image));
+        }
+
+        // compress Images
+        if(_compressionFactor_t > 1 || _compressionFactor_w > 1 ){
+            tellMe("compress Images",1);
+            for(size_t iPlane = 0;iPlane<3;iPlane++){
+                tellMe(Form("%zu size : %zu rows \t %zu cols for a %d x %d compression",iPlane,hit_image_v.at(iPlane).meta().rows(),hit_image_v.at(iPlane).meta().cols(),_compressionFactor_t,_compressionFactor_w),1);
+
+                hit_image_v.at(iPlane).compress(hit_image_v.at(iPlane).meta().rows()/_compressionFactor_t,
+                                                hit_image_v.at(iPlane).meta().cols()/_compressionFactor_w);
+
+                chstatus_image_v.at(iPlane).compress(chstatus_image_v.at(iPlane).meta().rows()/_compressionFactor_t,
+                                                     chstatus_image_v.at(iPlane).meta().cols()/_compressionFactor_w);
+                tellMe(Form("plane %zu %zu rows and %zu cols after compression", iPlane,hit_image_v.at(iPlane).meta().rows(),hit_image_v.at(iPlane).meta().cols()),1);
+            }
+            tellMe("image compressed",1);
+        }
+        imagesPair.first = hit_image_v;
+        imagesPair.second = chstatus_image_v;
+        imageOK = true;
+        return imagesPair;
+    }
+    //______________________________________________________
+    void AStarTracker::CreateImages(std::vector<larlite::wire> wire_v, bool &imageOK){
+        tellMe("Entering CreateImages(wire)",1);
+        hit_image_v.clear();
+        //hit_image_v.reserve(3);
+        const size_t num_planes = 3;
+
+        // Using the range, construct Image2D
+
+        for(size_t iPlane=0; iPlane<num_planes; ++iPlane) {
+            // Retrieve boundaries
+            auto const& time_bound = time_bounds[iPlane];
+            auto const& wire_bound = wire_bounds[iPlane];
+            // If no hit on this plane, make an empty image
+            if(wire_bound.second <= wire_bound.first ||
+               time_bound.second <= time_bound.first ) {
+                tellMe("Adding Empty Image",0);
+                hit_image_v[iPlane] = larcv::Image2D();
+                continue;
+            }
+            // Construct meta
+            //std::cout << "construct meta" << std::endl;
+            size_t image_cols = (size_t)(wire_bound.second - wire_bound.first);
+            size_t image_rows = (size_t)(time_bound.second - time_bound.first);
+            tellMe(Form("%zu cols and %zu rows",image_cols,image_rows),1);
+            larcv::ImageMeta hit_meta((double)image_cols, (double)image_rows,
+                                      image_rows, image_cols,
+                                      (size_t) wire_bound.first,  // origin x = min x
+                                      (size_t) time_bound.second, // origin y = max time
+                                      iPlane);
+
+
+            // Prepare hit image data + fill
+
+            std::vector<float> image_data(hit_meta.rows() * hit_meta.cols(), 0.);
+            size_t row,col;
+            for(auto wire : wire_v){
+                unsigned int ch = wire.Channel();
+                unsigned int detWire = larutil::Geometry::GetME()->ChannelToWire(ch);
+                unsigned int detPlane = larutil::Geometry::GetME()->ChannelToPlane(ch);
+                tellMe(Form("ch : %d, wire : %d, plane : %d", ch, detWire, detPlane),2);
+                if(detPlane != iPlane) continue;
+                if(detWire > wire_bound.first && detWire < wire_bound.second){
+                    for (auto & iROI : wire.SignalROI().get_ranges()) {
+                        int FirstTick = iROI.begin_index();
+                        int time_tick = FirstTick;
+                        for (float ADC : iROI) {
+                            if ( time_tick > time_bound.first && time_tick < time_bound.second ) {
+                                row = (size_t)(time_bound.second - time_tick + 0.5);
+                                col = (size_t)(detWire - wire_bound.first + 0.5);
+                                if(ADC >= _ADCthreshold){image_data[hit_meta.rows() * col + row] = ADC;}
+                            }
+                            time_tick++;
+                        } // ADC
+                    }// iROI
+                } // detWire
+            }
+            tellMe("image_data OK",1);
+            larcv::Image2D hit_image(std::move(hit_meta),std::move(image_data));
+            tellMe("hit_image OK",1);
+            tellMe(Form("hit_image_v.size() = %zu",hit_image_v.size()),1);
+            // compress Images
+            tellMe("compress Images",1);
+            if(_compressionFactor_t > 1 || _compressionFactor_w > 1 ){
+                tellMe(Form("plane %zu size : %zu rows, %zu cols for a %d x %d compression",iPlane,hit_image.meta().rows(),hit_image.meta().cols(),_compressionFactor_t,_compressionFactor_w),1);
+                hit_image.compress(hit_image.meta().rows()/_compressionFactor_t, hit_image.meta().cols()/_compressionFactor_w);
+                tellMe(Form("plane %zu %zu rows and %zu cols after compression", iPlane,hit_image.meta().rows(),hit_image.meta().cols()),1);
+                tellMe("image compressed",1);
+            }
+            hit_image_v.push_back(hit_image);
+        }
+        imageOK = true;
     }
 
     //
@@ -875,6 +1479,7 @@ namespace larlite {
         }
         return recoTrack;
     }
+    //______________________________________________________
     std::vector<TVector3> AStarTracker::CorrectSCE(larlite::mctrack thisTrack){
         std::vector<TVector3> newPath;
         for(size_t iNode = 0;iNode<thisTrack.size();iNode++){
@@ -883,6 +1488,7 @@ namespace larlite {
         }
         return CorrectSCE(newPath);
     }
+    //______________________________________________________
     std::vector<TVector3> AStarTracker::CorrectSCE(std::vector<TVector3> thisTrack){
         std::vector<TVector3> newPath;
         larlitecv::SpaceChargeMicroBooNE mySCEcorr;
@@ -893,7 +1499,7 @@ namespace larlite {
         }
         return newPath;
     }
-
+    
     //
     // When reading proton file
     //
@@ -917,7 +1523,7 @@ namespace larlite {
             if(file.eof()){goOn=false;break;}
         }
     }
-    
+    //______________________________________________________
     bool AStarTracker::IsGoodTrack(){
         for(auto trackinfo:_SelectableTracks){
             if(_run    != trackinfo[0])continue;
@@ -930,8 +1536,71 @@ namespace larlite {
         return false;
     }
 
-    void AStarTracker::tellMe(std::string s, int verboseMin = 0){
-        if(_verbose >= verboseMin) std::cout << s << std::endl;
+    void AStarTracker::SetTimeAndWireBounds(){
+        time_bounds.clear();
+        wire_bounds.clear();
+        time_bounds.reserve(3);
+        wire_bounds.reserve(3);
+        for(size_t iPlane=0; iPlane<3; ++iPlane) {
+            time_bounds[iPlane].first  = 1.e9;
+            time_bounds[iPlane].second = 0.;
+            wire_bounds[iPlane].first  = 1.e9;
+            wire_bounds[iPlane].second = 0.;
+        }
+
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            // make sure starting point is projected back in the range
+            if(X2Tick(start_pt.X(),iPlane) < time_bounds[iPlane].first ) time_bounds[iPlane].first  = X2Tick(start_pt.X(),iPlane);
+            if(X2Tick(start_pt.X(),iPlane) > time_bounds[iPlane].second) time_bounds[iPlane].second = X2Tick(start_pt.X(),iPlane);
+            double wireProjStartPt = larutil::GeometryHelper::GetME()->Point_3Dto2D(start_pt,iPlane).w / 0.3;
+            if(wireProjStartPt < wire_bounds[iPlane].first ) wire_bounds[iPlane].first  = wireProjStartPt;
+            if(wireProjStartPt > wire_bounds[iPlane].second) wire_bounds[iPlane].second = wireProjStartPt;
+
+            // make sure ending point is projected back in the range
+            if(X2Tick(end_pt.X(),iPlane) < time_bounds[iPlane].first ) time_bounds[iPlane].first  = X2Tick(end_pt.X(),iPlane);
+            if(X2Tick(end_pt.X(),iPlane) > time_bounds[iPlane].second) time_bounds[iPlane].second = X2Tick(end_pt.X(),iPlane);
+            double wireProjEndPt   = larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3;
+            if((larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3) < wire_bounds[iPlane].first ) wire_bounds[iPlane].first  = wireProjEndPt;
+            if((larutil::GeometryHelper::GetME()->Point_3Dto2D(end_pt,iPlane).w / 0.3) > wire_bounds[iPlane].second) wire_bounds[iPlane].second = wireProjEndPt;
+        }
+        // equalize time ranges to intercept the same range on 3 views
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            for(size_t jPlane=0;jPlane<3;jPlane++){
+                if(time_bounds[jPlane].first  <= time_bounds[iPlane].first) {time_bounds[iPlane].first  = time_bounds[jPlane].first;}
+                if(time_bounds[jPlane].second >= time_bounds[iPlane].second){time_bounds[iPlane].second = time_bounds[jPlane].second;}
+            }
+        }
+        // Update the range with margin
+        double ImageMargin = 50.;
+        double fractionImageMargin = 0.25;
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            time_bounds[iPlane].first  -= std::max(ImageMargin,fractionImageMargin*(time_bounds[iPlane].second-time_bounds[iPlane].first));
+            time_bounds[iPlane].second += std::max(ImageMargin,fractionImageMargin*(time_bounds[iPlane].second-time_bounds[iPlane].first));
+            wire_bounds[iPlane].first  -= std::max(ImageMargin,fractionImageMargin*(wire_bounds[iPlane].second-wire_bounds[iPlane].first));
+            wire_bounds[iPlane].second += std::max(ImageMargin,fractionImageMargin*(wire_bounds[iPlane].second-wire_bounds[iPlane].first));
+
+            if(time_bounds[iPlane].first < 0) time_bounds[iPlane].first = 0;
+            if(wire_bounds[iPlane].first < 0) wire_bounds[iPlane].first = 0;
+
+            wire_bounds[iPlane].first  = (size_t)(wire_bounds[iPlane].first + 0.5);
+            wire_bounds[iPlane].second = (size_t)(wire_bounds[iPlane].second + 0.5);
+        }
+
+        // make sure the number of rows and cols are divisible by _compressionFactor
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            while(!( (size_t)(time_bounds[iPlane].second - time_bounds[iPlane].first)%_compressionFactor_t == 0)){
+                time_bounds[iPlane].second++;//=(_compressionFactor_t-((size_t)(time_bounds[iPlane].second - time_bounds[iPlane].first)%_compressionFactor_t));
+            }
+            tellMe(Form("%zu rows for %d compression factor",(size_t)(time_bounds[iPlane].second - time_bounds[iPlane].first),_compressionFactor_t),1);
+        }
+
+        for(int iPlane = 0;iPlane<3;iPlane++){
+
+            while(!( (size_t)(wire_bounds[iPlane].second - wire_bounds[iPlane].first)%_compressionFactor_w == 0)){
+                wire_bounds[iPlane].second++;//=(_compressionFactor_w-((size_t)(wire_bounds[iPlane].second - wire_bounds[iPlane].first)%_compressionFactor_w));
+            }
+            tellMe(Form("%zu cols for %d compression factor",(size_t)(wire_bounds[iPlane].second - wire_bounds[iPlane].first),_compressionFactor_w),1);
+        }
     }
 
 }

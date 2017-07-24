@@ -29,11 +29,10 @@ my_proc.set_output_file("output_larlite.root");
 # Replace with your analysis unit if you wish.
 my_proc.add_process(fmwk.AStarTracker())
 #my_proc.set_data_to_write(larlite.event_track,"ev_track")
-#my_proc.get_process(0).set_producer("dl","chstatus_")
-my_proc.get_process(0).set_producer("pandoraNu","chstatus")
+my_proc.get_process(0).set_producer("dl","chstatus")
+#my_proc.get_process(0).set_producer("pandoraNu","chstatus")
 my_proc.get_process(0).SetCompressionFactors(2,2)
-my_proc.get_process(0).SetVerbose(0);
-my_proc.get_process(0).SetDrawOutputs(0);
+my_proc.get_process(0).SetVerbose(1);
 
 print
 print  "Finished configuring ana_processor. Start event loop!"

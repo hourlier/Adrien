@@ -24,7 +24,9 @@
 #include <TVector3.h>
 #include "DataFormat/Image2D.h"
 #include "DataFormat/ImageMeta.h"
+#include "DataFormat/wire.h"
 #include "TH1D.h"
+#include "TH2D.h"
 
 #include "/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/DeepLearning/myLArCV/core/DataFormat/ChStatus.h"
 
@@ -46,12 +48,17 @@ namespace larlite {
             _name="AStarTracker";
             _fout=0;//TFile::Open("output.root","RECREATE");
             _track_producer="dl";
-            _chstatus_producer="chstatus";
-            _mctrack_producer = "mcreco";
-            _speedOffset=-2;
+            _chstatus_producer = "chstatus";
+            _mctrack_producer  = "mcreco";
+            _wire_producer     = "caldata";
+            _hit_producer      = "gaushit";
+            //_speedOffset=-2;
+            _speedOffset=0;
             _verbose = 1;
-            _compressionFactor_t = 3;
-            _compressionFactor_w = 3;
+            _ADCthreshold = 10;
+            _compressionFactor_t = 1;
+            _compressionFactor_w = 1;
+            _DrawOutputs = false;
         }
 
         /// Default destructor
@@ -73,7 +80,16 @@ namespace larlite {
         virtual bool finalize();
 
         void set_producer(std::string track_producer,std::string chstatus_producer){ _track_producer = track_producer; _chstatus_producer = chstatus_producer; }
+
+        void set_trackProducer(  std::string track_producer   ){_track_producer    = track_producer;   }
+        void set_chstatProducer( std::string chstatus_producer){_chstatus_producer = chstatus_producer;}
+        void set_mctrackProducer(std::string mctrack_producer ){_mctrack_producer  = mctrack_producer; }
+        void set_wireProducer(   std::string wire_producer    ){_wire_producer     = wire_producer;    }
+        void set_hitProducer(    std::string hit_producer     ){_hit_producer      = hit_producer;     }
+
         void SetVerbose(int v){_verbose = v;}
+        void SetDrawOutputs(bool d){_DrawOutputs = d;}
+        void SetCompressionFactors(int compress_w, int compress_t){_compressionFactor_w = compress_w; _compressionFactor_t = compress_t;}
 
         void ReadProtonTrackFile();
         bool IsGoodTrack();
@@ -86,9 +102,8 @@ namespace larlite {
 
         larlite::track Reconstruct(const std::vector<larcv::Image2D>& hit_image_v,
                                    const std::vector<larcv::Image2D>& chstatus_image_v);
-        /*larlite::track Reconstruct(const TVector3& start_pt, const TVector3& end_pt,
-                                   const std::vector<larcv::Image2D>& hit_image_v,
-                                   const std::vector<larcv::Image2D>& chstatus_image_v);*/
+
+        larlite::track Reconstruct();
 
         void CompareReco2MC3D(const larlite::track recoTrack, const larlite::mctrack trueTrack);
         void CompareReco2hits(const larlite::track recoTrack,const std::vector<larcv::Image2D>& hit_image_v);
@@ -96,6 +111,12 @@ namespace larlite {
         void tellMe(std::string s, int verboseMin);
 
         std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > CreateImages(std::vector<larlite::hit> trackHit_v, std::vector< std::vector< std::pair<float,float> > > chstatus_vector, bool &imageOK);
+        std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > CreateImages(std::vector<larlite::wire> wire_v,    std::vector< std::vector< std::pair<float,float> > > chstatus_vector, bool &imageOK);
+        std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > CreateImages(std::vector<larlite::hit> trackHit_v, std::vector<larlite::wire> wire_v, std::vector< std::vector< std::pair<float,float> > > chstatus_vector, bool &imageOK);
+
+        void CreateImages(std::vector<larlite::wire> wire_v, bool &imageOK);
+
+        void SetTimeAndWireBounds();
 
         larlite::track MakeTrack();
         larlite::track ComputedQdX(larlite::track newTrack, const std::vector<larcv::Image2D>& hit_image_v, const std::vector<larcv::Image2D>& chstatus_image_v);
@@ -105,9 +126,13 @@ namespace larlite {
 
         std::vector<std::vector<int> > _SelectableTracks;
 
+
         std::string _track_producer;
         std::string _chstatus_producer;
         std::string _mctrack_producer;
+        std::string _wire_producer;
+        std::string _hit_producer;
+
         int _run;
         int _subrun;
         int _event;
@@ -117,7 +142,11 @@ namespace larlite {
         int _eventTreated;
         int _eventSuccess;
         int _verbose;
+
+        double _ADCthreshold;
         double _speedOffset;
+
+        bool _DrawOutputs;
 
         TH1D *hdQdx;
         TH1D *hdQdxEntries;
@@ -127,12 +156,21 @@ namespace larlite {
         TH1D *hDistance2MCZ;
         TH1D *hDistance2Hit;
         TH1D *hDistanceMC2Hit;
+        TH2D *hdQdX2D;
+        //TH2D *hdQdX2DNorm;
+
+        std::vector<TVector3> CorrectedPath;
 
         std::vector<larlitecv::AStar3DNode> RecoedPath;
-        std::vector<TVector3> CorrectedPath;
+
+        std::vector<larcv::Image2D> hit_image_v;
+        std::vector<larcv::Image2D> chstatus_image_v;
 
         TVector3 start_pt;
         TVector3 end_pt;
+
+        std::vector<std::pair<double,double> > time_bounds; // first=min, second=max
+        std::vector<std::pair<double,double> > wire_bounds; // first=min, second=max
 
         TCanvas *c2;
     };
