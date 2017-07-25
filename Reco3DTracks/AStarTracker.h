@@ -100,29 +100,29 @@ namespace larlite {
         //TPC tick (waveform index) to X[cm] conversion
         double Tick2X(double tick, size_t plane)const;
 
-        larlite::track Reconstruct(const std::vector<larcv::Image2D>& hit_image_v,
-                                   const std::vector<larcv::Image2D>& chstatus_image_v);
-
         larlite::track Reconstruct();
 
         void CompareReco2MC3D(const larlite::track recoTrack, const larlite::mctrack trueTrack);
-        void CompareReco2hits(const larlite::track recoTrack,const std::vector<larcv::Image2D>& hit_image_v);
+        void CompareReco2hits(const larlite::track recoTrack);
         void DrawdQdX(larlite::track thisTrack);
         void tellMe(std::string s, int verboseMin);
 
-        std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > CreateImages(std::vector<larlite::hit> trackHit_v, std::vector< std::vector< std::pair<float,float> > > chstatus_vector, bool &imageOK);
-        std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > CreateImages(std::vector<larlite::wire> wire_v,    std::vector< std::vector< std::pair<float,float> > > chstatus_vector, bool &imageOK);
-        std::pair< std::vector<larcv::Image2D>, std::vector<larcv::Image2D> > CreateImages(std::vector<larlite::hit> trackHit_v, std::vector<larlite::wire> wire_v, std::vector< std::vector< std::pair<float,float> > > chstatus_vector, bool &imageOK);
-
-        void CreateImages(std::vector<larlite::wire> wire_v, bool &imageOK);
+        void CreateDataImage(std::vector<larlite::wire> wire_v);
 
         void SetTimeAndWireBounds();
-
+        bool CheckEndPointsInVolume();
+        bool CheckEndPoints();
+        bool CheckEndPoints(std::vector< std::pair<int,int> > endPix);
+        void DrawTrack(const larlite::track recoTrack);
+        void DrawROI();
         larlite::track MakeTrack();
         larlite::track ComputedQdX(larlite::track newTrack, const std::vector<larcv::Image2D>& hit_image_v, const std::vector<larcv::Image2D>& chstatus_image_v);
         larlite::track CorrectSCE(larlite::track thisTrack);
         std::vector<TVector3> CorrectSCE(larlite::mctrack thisTrack);
         std::vector<TVector3> CorrectSCE(std::vector<TVector3> thisTrack);
+        double EvalMinDist(TVector3 point);
+        double EvalMinDist(TVector3 point, std::vector< std::pair<int,int> > endPix);
+        std::vector<TVector3> GetOpenSet(TVector3 newPoint, double dR);
 
         std::vector<std::vector<int> > _SelectableTracks;
 
