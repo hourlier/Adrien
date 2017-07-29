@@ -79,6 +79,7 @@ int main(int nargs, char** argv){
         TypeParticle[ipart][2] = larliteInputFile[partIndex]; // input file
         TypeParticle[ipart][3] = TrackFile[partIndex];        // track selection file
     }
+    std::cout << Nevt << " events" << std::endl;
     for(int ipart = 0;ipart<NparticlesInEvt;ipart++){
         std::cout << TypeParticle[ipart][0] << std::endl;
     }
@@ -233,6 +234,7 @@ void EndOfCode(){
     std::cout << "\t 2) : Charge deposition at vertex may not be the exact sum of ionization by each individual particles" << std::endl;
     std::cout << "\t 3) : How to save the event?" << std::endl;
     std::cout << "\t 4) : Need to use wire info instead of hits" << std::endl;
+    std::cout << "\t 5) : Implement the union of the dead wires for all tracks" << std::endl;
     std::cout << std::endl << "=================" << std::endl;
     std::cout << "Gracefuly stopped" << std::endl;
     std::cout << "=================" << std::endl;

@@ -46,9 +46,9 @@ namespace larlite {
         //
         // Check validity
         if(!ev_track){      throw DataFormatException("Could not locate event_track data product!");}
-        if(!ev_chstatus){   throw DataFormatException("Could not locate event_chstatus data product!");}
+        //if(!ev_chstatus){   throw DataFormatException("Could not locate event_chstatus data product!");}
         if(ev_track->empty()){std::cout << "No tracks in ev_track" << std::endl; return true;}
-        if(!ev_mct){        throw DataFormatException("Could not locate event_mctrack data product!");}
+        //if(!ev_mct){        throw DataFormatException("Could not locate event_mctrack data product!");}
         //
         // Get associated hits + association info
         larlite::event_hit* ev_hit=nullptr;
@@ -56,14 +56,16 @@ namespace larlite {
         if(!ev_hit) throw DataFormatException("Could not find associated hit data product!");
         //
         // Get empty channels
-        for(size_t iPlane=0;iPlane<_numPlanes;iPlane++){
-            for(size_t ch=0;ch<3456;ch++){chstat[iPlane][ch]=-1;}
-            for(auto const& chstatus_v : *ev_chstatus) {
-                if( chstatus_v.plane().Plane != iPlane) continue;
-                for(size_t ch=0; ch<chstatus_v.status().size(); ++ch) {
-                    auto const& status = chstatus_v.status()[ch];
-                    chstat[iPlane][ch]=1;
-                    if(status == larlite::larch::kGOOD){chstat[iPlane][ch]=0;}
+        if(ev_chstatus){
+            for(size_t iPlane=0;iPlane<_numPlanes;iPlane++){
+                for(size_t ch=0;ch<3456;ch++){chstat[iPlane][ch]=-1;}
+                for(auto const& chstatus_v : *ev_chstatus) {
+                    if( chstatus_v.plane().Plane != iPlane) continue;
+                    for(size_t ch=0; ch<chstatus_v.status().size(); ++ch) {
+                        auto const& status = chstatus_v.status()[ch];
+                        chstat[iPlane][ch]=1;
+                        if(status == larlite::larch::kGOOD){chstat[iPlane][ch]=0;}
+                    }
                 }
             }
         }
@@ -78,13 +80,15 @@ namespace larlite {
             std::cout << "\t\t" << thisTrack.ID() << "\t" << thisTrack.Length(0) << std::endl;
             //
             // Find corresponding MC track
-            for(auto const& mct : *ev_mct) {
-                double DRstart = sqrt(pow(start_pt.X()-mct.Start().X(),2)+pow(start_pt.Y()-mct.Start().Y(),2)+pow(start_pt.Z()-mct.Start().Z(),2));
-                double DRend = sqrt(pow(end_pt.X()-mct.End().X(),2)+pow(end_pt.Y()-mct.End().Y(),2)+pow(end_pt.Z()-mct.End().Z(),2));
-                if(DRstart > 20 || DRend > 20)continue;
-                thisTrueTrack = mct;
+            if(ev_mct){
+                for(auto const& mct : *ev_mct) {
+                    double DRstart = sqrt(pow(start_pt.X()-mct.Start().X(),2)+pow(start_pt.Y()-mct.Start().Y(),2)+pow(start_pt.Z()-mct.Start().Z(),2));
+                    double DRend = sqrt(pow(end_pt.X()-mct.End().X(),2)+pow(end_pt.Y()-mct.End().Y(),2)+pow(end_pt.Z()-mct.End().Z(),2));
+                    if(DRstart > 20 || DRend > 20)continue;
+                    thisTrueTrack = mct;
+                }
+                if(thisTrueTrack.size() == 0){std::cout << "Could not find MC track corresponding to provided start and end points => stop" << std::endl;continue;}
             }
-            if(thisTrueTrack.size() == 0){std::cout << "Could not find MC track corresponding to provided start and end points => stop" << std::endl;continue;}
 
             //
             // Get Hit vectors
@@ -163,14 +167,16 @@ namespace larlite {
             }*/
             //
             // assure that all true nodes are within bounds
-            for(size_t iNode=0;iNode<thisTrueTrack.size();iNode++){
-                TVector3 node(thisTrueTrack[iNode].X(),thisTrueTrack[iNode].Y(),thisTrueTrack[iNode].Z());
-                double wireProjmc = larutil::GeometryHelper::GetME()->Point_3Dto2D(node,iPlane).w/0.3;
-                double timeProjmc = X2Tick(node.X(),iPlane);
-                if(wireProjmc<wireLimit[iPlane].first ){wireLimit[iPlane].first  = wireProjmc;}
-                if(wireProjmc>wireLimit[iPlane].second){wireLimit[iPlane].second = wireProjmc;}
-                if(timeProjmc<timeLimit[iPlane].first ){timeLimit[iPlane].first  = timeProjmc;}
-                if(timeProjmc>timeLimit[iPlane].second){timeLimit[iPlane].second = timeProjmc;}
+            if(thisTrueTrack.size() != 0){
+                for(size_t iNode=0;iNode<thisTrueTrack.size();iNode++){
+                    TVector3 node(thisTrueTrack[iNode].X(),thisTrueTrack[iNode].Y(),thisTrueTrack[iNode].Z());
+                    double wireProjmc = larutil::GeometryHelper::GetME()->Point_3Dto2D(node,iPlane).w/0.3;
+                    double timeProjmc = X2Tick(node.X(),iPlane);
+                    if(wireProjmc<wireLimit[iPlane].first ){wireLimit[iPlane].first  = wireProjmc;}
+                    if(wireProjmc>wireLimit[iPlane].second){wireLimit[iPlane].second = wireProjmc;}
+                    if(timeProjmc<timeLimit[iPlane].first ){timeLimit[iPlane].first  = timeProjmc;}
+                    if(timeProjmc>timeLimit[iPlane].second){timeLimit[iPlane].second = timeProjmc;}
+                }
             }
         }
         //
@@ -225,9 +231,11 @@ namespace larlite {
                 y = X2Tick(thisCorrectedTrack.LocationAtPoint(iNode).X(),iPlane);
                 gCorrectedTrack[iPlane]->SetPoint(iNode,x,y);
             }
-            for(size_t iNode=0;iNode<thisTrueTrack.size();iNode++){
-                TVector3 node(thisTrueTrack[iNode].X(),thisTrueTrack[iNode].Y(),thisTrueTrack[iNode].Z());
-                gTrueTrack[iPlane]->SetPoint(iNode,larutil::GeometryHelper::GetME()->Point_3Dto2D(node,iPlane).w/0.3,X2Tick(thisTrueTrack[iNode].X(),iPlane));
+            if(thisTrueTrack.size()!=0){
+                for(size_t iNode=0;iNode<thisTrueTrack.size();iNode++){
+                    TVector3 node(thisTrueTrack[iNode].X(),thisTrueTrack[iNode].Y(),thisTrueTrack[iNode].Z());
+                    gTrueTrack[iPlane]->SetPoint(iNode,larutil::GeometryHelper::GetME()->Point_3Dto2D(node,iPlane).w/0.3,X2Tick(thisTrueTrack[iNode].X(),iPlane));
+                }
             }
         }
         //
@@ -254,11 +262,13 @@ namespace larlite {
             hHitImage2D[iPlane]->Draw("colz");
             for(size_t deadchannel = 0;deadchannel<deadch[iPlane].size();deadchannel++){deadch[iPlane][deadchannel].Draw("same");}
             gRecoedTrack[iPlane]->Draw("same LP");
-            gTrueTrack[iPlane]->SetLineWidth(2);
-            gTrueTrack[iPlane]->SetLineColor(2);
-            gTrueTrack[iPlane]->SetMarkerStyle(4);
-            gTrueTrack[iPlane]->SetMarkerColor(2);
-            gTrueTrack[iPlane]->Draw("same LP");
+            if(thisTrueTrack.size()!=0){
+                gTrueTrack[iPlane]->SetLineWidth(2);
+                gTrueTrack[iPlane]->SetLineColor(2);
+                gTrueTrack[iPlane]->SetMarkerStyle(4);
+                gTrueTrack[iPlane]->SetMarkerColor(2);
+                gTrueTrack[iPlane]->Draw("same LP");
+            }
             gCorrectedTrack[iPlane]->SetLineColor(4);
             gCorrectedTrack[iPlane]->SetLineWidth(2);
             gCorrectedTrack[iPlane]->SetMarkerStyle(4);

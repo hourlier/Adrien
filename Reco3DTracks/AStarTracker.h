@@ -29,9 +29,8 @@
 #include "TH2D.h"
 
 #include "/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/DeepLearning/myLArCV/core/DataFormat/ChStatus.h"
-
+#include "/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/DeepLearning/myLArCV/app/LArOpenCVHandle/LArbysUtils.h"
 #include "/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/myLArLiteCV/app/ThruMu/AStar3DAlgo.h"
-
 #include "/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/myLArLiteCV/app/ThruMu/AStar3DAlgoProton.h"
 
 namespace larlite {
@@ -54,9 +53,9 @@ namespace larlite {
             _hit_producer      = "gaushit";
             //_speedOffset=-2;
             _speedOffset=0;
-            _verbose = 1;
+            _verbose = 0;
             _ADCthreshold = 10;
-            _compressionFactor_t = 1;
+            _compressionFactor_t = 6;
             _compressionFactor_w = 1;
             _DrawOutputs = false;
         }
@@ -79,7 +78,10 @@ namespace larlite {
          */
         virtual bool finalize();
 
-        void set_producer(std::string track_producer,std::string chstatus_producer){ _track_producer = track_producer; _chstatus_producer = chstatus_producer; }
+        void set_producer(std::string track_producer,std::string chstatus_producer){
+            _track_producer = track_producer;
+            _chstatus_producer = chstatus_producer;
+        }
 
         void set_trackProducer(  std::string track_producer   ){_track_producer    = track_producer;   }
         void set_chstatProducer( std::string chstatus_producer){_chstatus_producer = chstatus_producer;}
@@ -90,43 +92,56 @@ namespace larlite {
         void SetVerbose(int v){_verbose = v;}
         void SetDrawOutputs(bool d){_DrawOutputs = d;}
         void SetCompressionFactors(int compress_w, int compress_t){_compressionFactor_w = compress_w; _compressionFactor_t = compress_t;}
-
+        void SetImages(std::vector<larcv::Image2D> images){hit_image_v = images;}
         void ReadProtonTrackFile();
-        bool IsGoodTrack();
-
-    protected:
-        // X[cm] to TPC tick (waveform index) conversion
-        double X2Tick(double x, size_t plane) const;
-        //TPC tick (waveform index) to X[cm] conversion
-        double Tick2X(double tick, size_t plane)const;
-
-        larlite::track Reconstruct();
 
         void CompareReco2MC3D(const larlite::track recoTrack, const larlite::mctrack trueTrack);
         void CompareReco2hits(const larlite::track recoTrack);
         void DrawdQdX(larlite::track thisTrack);
         void tellMe(std::string s, int verboseMin);
-
         void CreateDataImage(std::vector<larlite::wire> wire_v);
-
         void SetTimeAndWireBounds();
-        bool CheckEndPointsInVolume();
-        bool CheckEndPoints();
-        bool CheckEndPoints(std::vector< std::pair<int,int> > endPix);
+        void SetTimeAndWireBounds(TVector3 pointStart, TVector3 pointEnd);
+        void SetTimeAndWireBounds(std::vector<TVector3> points);
+        void SetEndPoints(TVector3 vertex, TVector3 endpoint){start_pt = vertex; end_pt = endpoint;}
         void DrawTrack(const larlite::track recoTrack);
         void DrawROI();
-        larlite::track MakeTrack();
-        larlite::track ComputedQdX(larlite::track newTrack, const std::vector<larcv::Image2D>& hit_image_v, const std::vector<larcv::Image2D>& chstatus_image_v);
-        larlite::track CorrectSCE(larlite::track thisTrack);
-        std::vector<TVector3> CorrectSCE(larlite::mctrack thisTrack);
-        std::vector<TVector3> CorrectSCE(std::vector<TVector3> thisTrack);
+
+        bool CheckEndPointsInVolume(TVector3 point);
+        bool IsGoodTrack();
+        bool CheckEndPoints(std::vector< std::pair<int,int> > endPix);
+
+        int  GetCompressionFactorTime(){return _compressionFactor_t;}
+        int  GetCompressionFactorWire(){return _compressionFactor_w;}
+
         double EvalMinDist(TVector3 point);
         double EvalMinDist(TVector3 point, std::vector< std::pair<int,int> > endPix);
-        std::vector<TVector3> GetOpenSet(TVector3 newPoint, double dR);
+        double X2Tick(double x, size_t plane) const;   // X[cm] to TPC tick (waveform index) conversion
+        double Tick2X(double tick, size_t plane)const; // TPC tick (waveform index) to X[cm] conversion
 
+        TVector3        CheckEndPoints(TVector3 point);
+        TVector3        CheckEndPoints(TVector3 point,std::vector< std::pair<int,int> > endPix);
+
+
+        larlite::track  MakeTrack();
+        larlite::track  Reconstruct();
+        larlite::track  CorrectSCE(larlite::track thisTrack);
+        larlite::track  ComputedQdX(larlite::track newTrack, const std::vector<larcv::Image2D>& hit_image_v, const std::vector<larcv::Image2D>& chstatus_image_v);
+
+        std::vector<TVector3>   CorrectSCE(larlite::mctrack thisTrack);
+        std::vector<TVector3>   CorrectSCE(std::vector<TVector3> thisTrack);
+        std::vector<TVector3>   GetOpenSet(TVector3 newPoint, double dR);
+        
         std::vector<std::vector<int> > _SelectableTracks;
 
 
+        std::vector<std::pair<double,double> > GetTimeBounds(){std::cout << time_bounds.size() << std::endl; return time_bounds;}
+        std::vector<std::pair<double,double> > GetWireBounds(){std::cout << time_bounds.size() << std::endl; return wire_bounds;}
+        std::vector<std::pair<int, int> >      GetWireTimeProjection(TVector3 point);
+
+
+    protected:
+        
         std::string _track_producer;
         std::string _chstatus_producer;
         std::string _mctrack_producer;
@@ -169,8 +184,8 @@ namespace larlite {
         TVector3 start_pt;
         TVector3 end_pt;
 
-        std::vector<std::pair<double,double> > time_bounds; // first=min, second=max
-        std::vector<std::pair<double,double> > wire_bounds; // first=min, second=max
+        std::vector<std::pair<double,double> > time_bounds;
+        std::vector<std::pair<double,double> > wire_bounds;
 
         TCanvas *c2;
     };

@@ -75,7 +75,7 @@ void ChimeraPatching::DrawEvent(){
     if(_translatedTracks.size() == 0){_translatedTracks = _Tracks;}
     if(_translatedHitClusters.size() == 0){_translatedHitClusters = _HitClusters;}
     gStyle->SetOptStat(0);
-    gStyle->SetPalette(1);
+    //gStyle->SetPalette(1);
     int timebounds[2] = {1000000,0};
     int wirebounds[3][2];
     for(size_t iPlane=0;iPlane<3;iPlane++){
@@ -132,28 +132,31 @@ void ChimeraPatching::DrawEvent(){
             }
         }
 
-        hEventImage[iPlane] = new TH2D(Form("hEventImage_%s_%zu",_evtID.c_str(),iPlane),Form("hEventImage_%s_%zu",_evtID.c_str(),iPlane),wirebounds[iPlane][1]-wirebounds[iPlane][0],wirebounds[iPlane][0],wirebounds[iPlane][1],timebounds[1]-timebounds[0],timebounds[0],timebounds[1]);
-        /*for(int icol=0;icol<hEventImage[iPlane]->GetNbinsX();icol++){
+        hEventImage[iPlane] = new TH2D(Form("hEventImage_%s_%zu",_evtID.c_str(),iPlane),Form("hEventImage_%s_%zu;wire;time [ticks]",_evtID.c_str(),iPlane),wirebounds[iPlane][1]-wirebounds[iPlane][0],wirebounds[iPlane][0],wirebounds[iPlane][1],timebounds[1]-timebounds[0],timebounds[0],timebounds[1]);
+        hEventImage[iPlane]->SetTitleOffset(1.5,"Y");
+        for(int icol=0;icol<hEventImage[iPlane]->GetNbinsX();icol++){
             for(int irow=0;irow<hEventImage[iPlane]->GetNbinsY();irow++){
-                hEventImage[iPlane]->SetBinContent(icol+1,irow+1,10);
+                hEventImage[iPlane]->SetBinContent(icol+1,irow+1,1); // just to get the blue background
             }
-        }*/
+        }
 
         for(size_t iCluster = 0;iCluster<_translatedHitClusters.size();iCluster++){
             for(auto h:_translatedHitClusters[iCluster]){
                 if(h.WireID().Plane!=iPlane)continue;
-                //hEventImage[iPlane]->SetBinContent(h.WireID().Wire+1-wirebounds[iPlane][0],h.PeakTime()+1-timebounds[0],h.Integral());
-                hEventImage[iPlane]->SetBinContent(h.WireID().Wire+1-wirebounds[iPlane][0],h.PeakTime()+1-timebounds[0],iCluster+0.1);
+                hEventImage[iPlane]->SetBinContent(h.WireID().Wire+1-wirebounds[iPlane][0],h.PeakTime()+1-timebounds[0],h.Integral());
+                //hEventImage[iPlane]->SetBinContent(h.WireID().Wire+1-wirebounds[iPlane][0],h.PeakTime()+1-timebounds[0],iCluster+0.1);
             }
         }
         cEventImage->cd(1)->cd(iPlane+1);
-        hEventImage[iPlane]->Rebin2D(1,1);
+        hEventImage[iPlane]->Rebin2D(1,6);
+        hEventImage[iPlane]->GetZaxis()->SetTitle("integrated wire amplitude [ADC]");
+        hEventImage[iPlane]->GetZaxis()->SetTitleOffset(1.1);
         hEventImage[iPlane]->Draw("colz");
         gX0[iPlane].Draw("P");
-        for(int iTrack = 0;iTrack<_translatedTracks.size();iTrack++){
+        /*for(int iTrack = 0;iTrack<_translatedTracks.size();iTrack++){
             gTrackPoint[iPlane][iTrack].SetMarkerStyle(7);
             gTrackPoint[iPlane][iTrack].Draw("P");
-        }
+        }*/
     }
 
     cEventImage->cd(2);
